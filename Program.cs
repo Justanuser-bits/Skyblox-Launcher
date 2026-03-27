@@ -19,9 +19,9 @@ namespace CarbonLauncher
     public partial class LauncherForm : Form
     {
 
-        private const string CurrentVersion = "1.2.1";
-        private const string VersionUrl = "https://lureon.fit/launcher/version.txt";
-        private const string LauncherDownloadUrl = "https://lureon.fit/launcher/CarbonLauncher.exe";
+        private const string CurrentVersion = "1.2.0";
+        private const string VersionUrl = "https://lureon.fit/clients/version.txt";
+        private const string LauncherDownloadUrl = "https://lureon.fit/clients/CarbonLauncher.exe";
 
         public const int WM_NCLBUTTONDOWN = 0xA1;
         public const int HT_CAPTION = 0x2;
