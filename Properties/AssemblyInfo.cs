@@ -1,16 +1,16 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("CarbonLauncher")]
+[assembly: AssemblyTitle("Carbon Launcher")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("HP")]
+[assembly: AssemblyCompany("Carbon Monoxide")]
 [assembly: AssemblyProduct("CarbonLauncher")]
-[assembly: AssemblyCopyright("Copyright © HP 2025")]
+[assembly: AssemblyCopyright("FOSS")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
