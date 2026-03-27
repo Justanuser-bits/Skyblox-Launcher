@@ -1,11 +1,16 @@
 # Carbon - Launcher
 
-**Credits to @harryzawg for the initialization code. My last one was buggy as shit, so credits to him.**
-
 This is the complete, full source of the Carbon launcher.
 
-You may run whatever tests you want on the built .exe file that you built on Visual Studio, and/or you may scan the Program.cs file for any suspicious acts.
+Help will not be given on building this source unless you own a revival and have a purpose.
 
-If you have any inquiries, contact **av7b** on Discord. That is the only person you should go to.
+If you have any inquiries, contact **1ubd** or **loukseton** on Discord.
 
-https://www.lureon.fit/
+https://lureon.fit/
+
+## NuGet packages used
+
+DiscordRichPresence by Lachee
+Costura.Fody by Fody
+Fody by The Fody Team
+Newtonsoft.Json by James Newton-King
