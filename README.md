@@ -11,6 +11,10 @@ https://lureon.fit/
 ## NuGet packages used
 
 -DiscordRichPresence by Lachee
+
 -Costura.Fody by Fody
+
 -Fody by The Fody Team
+
 -Newtonsoft.Json by James Newton-King
+
