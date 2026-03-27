@@ -1,340 +1,272 @@
-﻿// This source is a bit buggy, but should work fine. Proper integration of missing features & improvements will be made throughout the time.
-// This source is subject to change.
-// If you're confused on how to use this source, then please
+// im tired
+
 using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.IO.Compression;
-using System.Net;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 using System.Windows.Forms;
 using Microsoft.Win32;
+using DiscordRPC;
 
 namespace CarbonLauncher
 {
     public partial class LauncherForm : Form
     {
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool CheckRemoteDebuggerPresent(IntPtr hProcess, ref bool isPresent);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+        private const string CurrentVersion = "1.2.1";
+        private const string VersionUrl = "https://lureon.fit/launcher/version.txt";
+        private const string LauncherDownloadUrl = "https://lureon.fit/launcher/CarbonLauncher.exe";
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool CloseHandle(IntPtr hObject);
+        public const int WM_NCLBUTTONDOWN = 0xA1;
+        public const int HT_CAPTION = 0x2;
+        [DllImport("user32.dll")] public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+        [DllImport("user32.dll")] public static extern bool ReleaseCapture();
 
-        private const uint PROCESS_VM_READ = 0x0010;
-        private const uint PROCESS_VM_WRITE = 0x0020;
-        private const uint PROCESS_VM_OPERATION = 0x0008;
-
-        private readonly string placeId;
-        private readonly string ticket;
-        private readonly bool use2020;
-
+        private readonly string placeId, ticket, year;
         private readonly string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Carbon");
-        private readonly string exePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Carbon", "Carbon.exe");
 
-        private string ClientFolder => Path.Combine(appData, use2020 ? "2020" : "2016");
-        private string ClientExe => Path.Combine(ClientFolder, "BBPlayerBeta.exe");
+        private string CurrentYearFolder => Path.Combine(appData, year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : "2016");
+        private string ClientExe => Path.Combine(CurrentYearFolder, "CarbonPlayerBeta.exe");
+        private string AppExePath => Application.ExecutablePath;
+        
+        private ProgressBar progress;
+        private Label status, closeBtn;
+        private bool isDarkMode = false;
+        private bool isRepairMode = false;
 
-        private Process gameProcess;
-        private Thread antiCheatThread;
-        private ProgressBar progress;
-        private Label status;
-        private bool FirstRun = true;
-        private bool Installing = true;
-
-        public LauncherForm(string placeId, string ticket, bool use2020)
+        public LauncherForm(string placeId, string ticket, string year)
         {
             this.placeId = placeId;
             this.ticket = ticket;
-            this.use2020 = use2020;
+            this.year = year;
+            if (Control.ModifierKeys == Keys.Shift) isRepairMode = true;
+
             InitializeComponent();
-            this.Load += (s, e) => Task.Run((Action)StartLauncher);
+            this.Load += (s, e) => Task.Run(StartLauncher);
         }
 
-        private async void StartLauncher()
-        {
-
-            await EnsureLauncherCopied();
-            RegisterProtocol();
-            await InstallBothClients();
-
-            if (!string.IsNullOrEmpty(placeId) && !string.IsNullOrEmpty(ticket))
-                LaunchGameWithAntiCheat();
-            else
-                this.Close();
-        }
-
-        private async Task EnsureLauncherCopied()
-        {
-            if (!Directory.Exists(appData)) Directory.CreateDirectory(appData);
-            string current = Process.GetCurrentProcess().MainModule.FileName;
-            if (File.Exists(exePath) && File.GetLastWriteTime(current) <= File.GetLastWriteTime(exePath)) return;
-            File.Copy(current, exePath, true);
-        }
-
-        private void RegisterProtocol()
+        private async Task StartLauncher()
         {
             try
             {
-                using (var key = Registry.CurrentUser.CreateSubKey(@"Software\Classes\bbclient"))
+                UpdateStatus("Checking for updates...");
+                await CheckForLauncherUpdates();
+
+                if (!Directory.Exists(appData)) Directory.CreateDirectory(appData);
+                RegisterProtocol();
+
+                // previous problem: we didnt install 2020 and 2021 only 2016 so use InstallAllMissingClients to ensure we have our clients
+                await InstallAllMissingClients();
+
+                if (!string.IsNullOrEmpty(placeId))
+                    LaunchGame();
+                else
+                    UpdateStatus("Finished installing all clients. You may now exit");
+            }
+            catch (Exception ex) { MessageBox.Show("Error: " + ex.Message); }
+        }
+
+        private async Task CheckForLauncherUpdates()
+        {
+            try
+            {
+                using (var client = new HttpClient())
                 {
-                    key.SetValue("", "URL:Carbon Protocol");
-                    key.SetValue("URL Protocol", "");
-                    using (var icon = key.CreateSubKey("DefaultIcon")) icon.SetValue("", $"\"{exePath}\",1");
-                    using (var cmd = key.CreateSubKey(@"shell\open\command")) cmd.SetValue("", $"\"{exePath}\" \"%1\"");
+                    string latest = (await client.GetStringAsync($"{VersionUrl}?t={DateTime.Now.Ticks}")).Trim();
+                    if (latest != CurrentVersion)
+                    {
+                        UpdateStatus($"Updating to v{latest}...");
+                        byte[] newExe = await client.GetByteArrayAsync(LauncherDownloadUrl);
+                        string tmpPath = AppExePath + ".tmp";
+                        File.WriteAllBytes(tmpPath, newExe);
+
+                        string batch = $"@echo off\ntimeout /t 1\ndel \"{AppExePath}\"\nmove \"{tmpPath}\" \"{AppExePath}\"\nstart \"\" \"{AppExePath}\"\nexit";
+                        File.WriteAllText("update.bat", batch);
+                        Process.Start(new ProcessStartInfo("update.bat") { CreateNoWindow = true, UseShellExecute = false });
+                        Application.Exit();
+                    }
                 }
             }
             catch { }
         }
 
-        private async Task InstallBothClients()
+        private async Task InstallAllMissingClients()
         {
-            bool has2016 = File.Exists(Path.Combine(appData, "2016", "BBPlayerBeta.exe")); // change the bbplayerbeta.exe if you're using a different client name
-            bool has2020 = File.Exists(Path.Combine(appData, "2020", "BBPlayerBeta.exe")); // change the bbplayerbeta.exe if you're using a different client name
+            string[] years = { "2016", "2020", "2021" };
+            string[] urls = {
+                "https://lureon.fit/clients/16client.zip",
+                "https://lureon.fit/clients/20client.zip",
+                "https://lureon.fit/clients/21client.zip"
+            };
 
-            if (has2016 && has2020) return;
-
-            using (var wc = new WebClient())
+            for (int i = 0; i < years.Length; i++)
             {
-                if (!has2016)
+                string path = Path.Combine(appData, years[i]);
+                string exePath = Path.Combine(path, "CarbonPlayerBeta.exe");
+
+                if (!File.Exists(exePath) || (isRepairMode && year.Contains(years[i])))
                 {
-                    UpdateStatus("Installing 2016 client...");
-                    await wc.DownloadFileTaskAsync("https://lureon.fit/clientings/16client.zip", Path.Combine(appData, "16client.zip"));
-                    Extract(Path.Combine(appData, "16client.zip"), Path.Combine(appData, "2016"));
-                }
-                if (!has2020)
-                {
-                    UpdateStatus("Installing 2020 client...");
-                    await wc.DownloadFileTaskAsync("https://lureon.fit/clientings/20client.zip", Path.Combine(appData, "20client.zip"));
-                    Extract(Path.Combine(appData, "20client.zip"), Path.Combine(appData, "2020"));
+                    UpdateStatus($"Downloaing {years[i]}...");
+                    string zip = Path.Combine(appData, "temp.zip");
+                    await DownloadFile(urls[i], zip, years[i]);
+
+                    UpdateStatus($"Extracting {years[i]}...");
+                    if (Directory.Exists(path)) Directory.Delete(path, true);
+                    ZipFile.ExtractToDirectory(zip, path);
+                    File.Delete(zip);
                 }
             }
         }
 
-        private void Extract(string zip, string dest)
+        private async Task DownloadFile(string url, string dest, string yearLabel)
         {
-            if (Directory.Exists(dest)) Directory.Delete(dest, true);
-            ZipFile.ExtractToDirectory(zip, dest);
-            File.Delete(zip);
+            using (var client = new HttpClient())
+            using (var res = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
+            {
+                var total = res.Content.Headers.ContentLength ?? -1L;
+                using (var fs = new FileStream(dest, FileMode.Create))
+                using (var s = await res.Content.ReadAsStreamAsync())
+                {
+                    byte[] buffer = new byte[8192];
+                    long readTotal = 0; int read;
+                    while ((read = await s.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                    {
+                        await fs.WriteAsync(buffer, 0, read);
+                        readTotal += read;
+                        if (total != -1)
+                        {
+                            int pct = (int)((readTotal * 100) / total);
+                            BeginInvoke((MethodInvoker)(() => {
+                                progress.Value = pct;
+                                status.Text = $"Downloading {yearLabel}: {pct}%";
+                            }));
+                        }
+                    }
+                }
+            }
         }
 
-        private void LaunchGameWithAntiCheat()
+        private void LaunchGame()
         {
-            UpdateStatus("Launching Carbon...");
+            if (!File.Exists(ClientExe))
+            {
+                MessageBox.Show($"Missing: {ClientExe}\nHold Shift while opening to Repair.");
+                return;
+            }
 
-            string authUrl = "https://lureon.fit/Login/Negotiate.ashx";
-            string joinUrl = use2020
-              ? $"http://lureon.fit/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}&2020=true"
-              : $"http://lureon.fit/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}";
+            string yearFlag = year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : null;
+            string joinUrl = !string.IsNullOrEmpty(yearFlag)
+                ? $"http://lureon.fit/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}&{yearFlag}=true"
+                : $"http://lureon.fit/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}";
 
-            var psi = new ProcessStartInfo
+            try
+            {
+                var client = new DiscordRpcClient("1479799560762036305");
+                client.Initialize();
+                client.SetPresence(new RichPresence
+                {
+                    Details = $"Playing Place: {placeId}",
+                    State = $"Year: {year}",
+                    Timestamps = Timestamps.Now,
+                    Assets = new Assets { LargeImageKey = "carbon_logo" }
+                });
+            }
+            catch { /* g */ }
+
+            Process.Start(new ProcessStartInfo
             {
                 FileName = ClientExe,
-                Arguments = $"-a \"{authUrl}\" -j \"{joinUrl}\" -t \"{ticket}\"",
-                WorkingDirectory = ClientFolder,
-                UseShellExecute = true
-            };
+                Arguments = $"-a \"https://lureon.fit/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"",
+                WorkingDirectory = CurrentYearFolder
+            });
 
-            gameProcess = Process.Start(psi);
-            antiCheatThread = new Thread(() => AntiCheatMonitor(gameProcess))
-            {
-                IsBackground = true,
-                Name = "carbonmonoxide"
-            };
-            antiCheatThread.Start();
+            this.BeginInvoke((MethodInvoker)delegate { this.Hide(); });
 
-            Task.Delay(3000).ContinueWith(_ => BeginInvoke((MethodInvoker)Close));
-        }
-
-        private void AntiCheatMonitor(Process proc)
-        {
-            while (!proc.HasExited)
-            {
-                try
-                {
-                    proc.Refresh();
-
-                    // check for debuggers (any debugger really)
-                    bool isDebuggerPresent = false;
-                    if (CheckRemoteDebuggerPresent(proc.Handle, ref isDebuggerPresent) && isDebuggerPresent)
-                    {
-                        KillnNotify("Debugger detected attempting to attach to the client process. You have been kicked from the session");
-                        return;
-                    }
-
-                    // check for process memory access handles (cheat engine etc.)
-                    // if an external tool has opened the process with memory read or write rights, this will succeed.
-                    if (IsProcessMemoryAccessed(proc.Id))
-                    {
-                        KillnNotify("External application detected accessing client memory. You have been kicked from the session.");
-                        return;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    
-                }
-                Thread.Sleep(500);
-            }
-        }
-
-        private void KillnNotify(string reason)
-        {
-            if (!gameProcess.HasExited)
-            {
-                try { gameProcess.Kill(); } catch { }
-            }
-
-            // use BeginInvoke since this is called from a non ui thread (antiCheatThread)
-            BeginInvoke((MethodInvoker)(() =>
-            {
-                MessageBox.Show($"Carbon Monoxide has detected a third party application. Reason: {reason}\n\nYou will be exited from this application.", "Carbon - Carbon Monoxide", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            new Thread(() => {
+                Thread.Sleep(5000);
+                while (Process.GetProcessesByName("CarbonPlayerBeta").Length > 0) Thread.Sleep(3000);
                 Application.Exit();
-            }));
+            }).Start();
         }
 
-        private bool IsProcessMemoryAccessed(int processId) // below lists what this part of the anticheat actually does
-        {
-            // attempt to open the process with read or write access rights if the process is already opened by another tool with these rights, or if the tool is actively using them, this check attempts to confirm external access
-            uint desiredAccess = PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION;
-            IntPtr handle = OpenProcess(desiredAccess, false, processId);
-
-            if (handle != IntPtr.Zero)
-            {
-                // if we get a handle successfully, then we can check
-                CloseHandle(handle);
-                // this is a weak check, as it only proves the launcher can get these rights a more stronger but complex check would be to monitor for specific handles
-                // however, for most simple external tools, trying to open these rights can sometimes indicate an issue if other checks are failing
-                // for now, this check is most effective when trying to get a handle with rights that another process is trying to control or is actively denying us
-                return false;
-            }
-            int lastError = Marshal.GetLastWin32Error();
-            if (lastError == 5)
-            {
-                // access is denied. This may indicate another process has opened the handle with exclusive access rights, or it can be due to security orintegrity levels
-                // for a launcher monitoring its own child process, this is often a good indicator of tampering, though it can be a false positive
-                return true;
-            }
-            // please note you may add further more attachments and implementations to the anticheat system.
-            return false;
-        }
-        private void UpdateStatus(string text)
-        {
-            if (this.IsHandleCreated && !this.IsDisposed)
-            {
-                if (this.InvokeRequired)
-                    this.BeginInvoke((MethodInvoker)(() => status.Text = text));
-                else
-                    status.Text = text;
-            }
-        }
-        private void Cancel()
-        {
-            // no proper integration right now, just close the form.
-            this.Close();
-        }
         private void InitializeComponent()
         {
-            this.Text = "Carbon Launcher";
-            this.ClientSize = new System.Drawing.Size(400, 200);
-            this.FormBorderStyle = FormBorderStyle.FixedDialog;
-            this.MaximizeBox = false;
-            this.MinimizeBox = false;
-            this.BackColor = System.Drawing.Color.White;
+            this.ClientSize = new Size(440, 280);
+            this.FormBorderStyle = FormBorderStyle.None;
             this.StartPosition = FormStartPosition.CenterScreen;
+            this.MouseDown += (s, e) => { if (e.Button == MouseButtons.Left) { ReleaseCapture(); SendMessage(Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0); } };
 
-            var logo = new PictureBox
-            {
-                SizeMode = PictureBoxSizeMode.Zoom,
-                Width = 200,
-                Height = 100,
-                Top = 20,
-                Left = (this.ClientSize.Width - 200) / 2,
-            };
+            var logo = new PictureBox { SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(180, 90), Top = 30, Left = 130, Cursor = Cursors.Hand };
+            logo.Click += (s, e) => { isDarkMode = !isDarkMode; ApplyTheme(); };
 
-            // man this ide is a pain in the ass
-            using (var ms = new MemoryStream(CarbonLauncher.Properties.Resources.carbon_logo))
+            try
             {
-                logo.Image = Image.FromStream(ms);
+                using (var ms = new MemoryStream(Properties.Resources.carbon_logo))
+                {
+                    logo.Image = Image.FromStream(ms);
+                }
             }
+            catch { }
 
-            this.Controls.Add(logo);
+            status = new Label { Top = 135, Left = 0, Width = 440, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI Semibold", 12f) };
+            progress = new ProgressBar { Top = 185, Left = 70, Width = 300, Height = 6 };
+            closeBtn = new Label { Text = "✕", Top = 10, Left = 405, Width = 25, Height = 25, Font = new Font("Segoe UI", 12f, FontStyle.Bold), Cursor = Cursors.Hand, TextAlign = ContentAlignment.MiddleCenter };
+            closeBtn.Click += (s, e) => Application.Exit();
 
-            progress = new ProgressBar
-            {
-                Top = 145,
-                Left = 20,
-                Width = this.ClientSize.Width - 40,
-                Height = 20,
-                Style = ProgressBarStyle.Continuous
-            };
-            this.Controls.Add(progress);
+            var footer = new Label { Name = "footer", Text = "Hold SHIFT to repair | v1.2.0", Top = 245, Left = 0, Width = 440, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 8f) };
 
-            status = new Label
-            {
-                Top = 100,
-                Left = 20,
-                Width = this.ClientSize.Width - 40,
-                Height = 60,
-                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
-                Text = FirstRun ? "Installing Carbon..." : "Launching Carbon..."
-            };
-            this.Controls.Add(status);
+            var vers = new Label { Name = "vers", Text = "v1.2.0", Top = 245, Left = 0, Width = 440, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 8f) };
 
-            var cancel = new Button
-            {
-                Text = "Cancel",
-                Top = 170,
-                Left = (this.ClientSize.Width - 80) / 2,
-                Width = 80,
-                Height = 25
-            };
-            cancel.Click += (s, e) =>
-            {
-                if (Installing)
-                    Cancel();
-                else
-                    this.Close();
-            };
-            this.Controls.Add(cancel);
+            this.Controls.AddRange(new Control[] { logo, status, progress, closeBtn, footer });
+            SyncWithWindowsTheme();
         }
 
-        static class Program
+        private void ApplyTheme()
         {
-            [STAThread]
-            static void Main(string[] args)
+            Color bg = isDarkMode ? Color.FromArgb(25, 25, 25) : Color.White;
+            Color text = isDarkMode ? Color.WhiteSmoke : Color.FromArgb(40, 40, 40);
+            this.BackColor = bg;
+            status.ForeColor = text;
+            closeBtn.ForeColor = text;
+            foreach (Control c in Controls) if (c.Name == "footer") c.ForeColor = Color.Gray;
+        }
+
+        private void SyncWithWindowsTheme()
+        {
+            try
             {
-                Application.EnableVisualStyles();
-                Application.SetCompatibleTextRenderingDefault(false);
-
-                string place = null, ticket = null;
-                bool use2020 = false;
-
-                if (args.Length > 0)
-                {
-                    string url = args[0];
-                    int hash = url.IndexOf('#');
-                    if (hash >= 0) url = url.Substring(0, hash);
-
-                    if (url.StartsWith("bbclient://", StringComparison.OrdinalIgnoreCase)) // idk when im gonna change this protocol
-                    {
-                        var uri = new Uri(url);
-                        var q = HttpUtility.ParseQueryString(uri.Query);
-                        place = q["place"] ?? q["placeId"];
-                        ticket = q["ticket"];
-                        use2020 = q["2020"] == "true" || q["year"] == "2020";
-                    }
-                }
-
-                Application.Run(new LauncherForm(place, ticket, use2020));
+                using (var k = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+                    isDarkMode = (int)k.GetValue("AppsUseLightTheme") == 0;
             }
+            catch { isDarkMode = false; }
+            ApplyTheme();
+        }
+
+        private void UpdateStatus(string t) => BeginInvoke((MethodInvoker)(() => status.Text = t));
+        private void RegisterProtocol() { try { var k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\carbon"); k.SetValue("", "URL:Carbon Protocol"); k.SetValue("URL Protocol", ""); k.CreateSubKey(@"shell\open\command").SetValue("", $"\"{AppExePath}\" \"%1\""); } catch { } }
+    }
+
+    static class Program
+    {
+        [STAThread]
+        static void Main(string[] args)
+        {
+            Application.EnableVisualStyles();
+            string p = null, t = null, y = "2016";
+            if (args.Length > 0 && args[0].StartsWith("carbon://"))
+            {
+                var q = HttpUtility.ParseQueryString(new Uri(args[0]).Query);
+                p = q["place"] ?? q["placeId"]; t = q["ticket"];
+                y = (q["2021"] == "true" || q["year"] == "2021") ? "2021" : (q["2020"] == "true" || q["year"] == "2020") ? "2020" : "2016";
+            }
+            Application.Run(new LauncherForm(p, t, y));
         }
     }
 }
+// fin
