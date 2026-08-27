@@ -12,16 +12,15 @@ using System.Threading.Tasks;
 using System.Web;
 using System.Windows.Forms;
 using Microsoft.Win32;
-using DiscordRPC;
 
-namespace CarbonLauncher
+namespace SkybloxLauncher
 {
     public partial class LauncherForm : Form
     {
 
         private const string CurrentVersion = "1.2.0";
-        private const string VersionUrl = "https://lureon.fit/clients/version.txt";
-        private const string LauncherDownloadUrl = "https://lureon.fit/clients/CarbonLauncher.exe";
+        private const string VersionUrl = "https://skyblox.co/clients/version.txt";
+        private const string LauncherDownloadUrl = "https://skyblox.co/clients/SkybloxLauncher.exe";
 
         public const int WM_NCLBUTTONDOWN = 0xA1;
         public const int HT_CAPTION = 0x2;
@@ -29,10 +28,10 @@ namespace CarbonLauncher
         [DllImport("user32.dll")] public static extern bool ReleaseCapture();
 
         private readonly string placeId, ticket, year;
-        private readonly string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Carbon");
+        private readonly string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Skyblox");
 
-        private string CurrentYearFolder => Path.Combine(appData, year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : "2016");
-        private string ClientExe => Path.Combine(CurrentYearFolder, "CarbonPlayerBeta.exe");
+        private string CurrentYearFolder => Path.Combine(appData, year.Contains("2021") ? @"2021\2021" : year.Contains("2020") ? @"2020\2020" : @"2016\2016");
+        private string ClientExe => Path.Combine(CurrentYearFolder, "RobloxPlayerBeta.exe");
         private string AppExePath => Application.ExecutablePath;
         
         private ProgressBar progress;
@@ -98,17 +97,18 @@ namespace CarbonLauncher
 
         private async Task InstallAllMissingClients()
         {
-            string[] years = { "2016", "2020", "2021" };
+            string[] years = { "2016", "2020" };
             string[] urls = {
-                "https://lureon.fit/clients/16client.zip",
-                "https://lureon.fit/clients/20client.zip",
-                "https://lureon.fit/clients/21client.zip"
+                "http://skyblox.co/clients/16client.zip",
+                "http://skyblox.co/clients/20client.zip"
             };
 
             for (int i = 0; i < years.Length; i++)
             {
+                if (!this.year.Contains(years[i]) && !isRepairMode) continue;
+
                 string path = Path.Combine(appData, years[i]);
-                string exePath = Path.Combine(path, "CarbonPlayerBeta.exe");
+                string exePath = Path.Combine(path, years[i], "RobloxPlayerBeta.exe");
 
                 if (!File.Exists(exePath) || (isRepairMode && year.Contains(years[i])))
                 {
@@ -143,8 +143,16 @@ namespace CarbonLauncher
                         {
                             int pct = (int)((readTotal * 100) / total);
                             BeginInvoke((MethodInvoker)(() => {
+                                progress.Style = ProgressBarStyle.Blocks;
                                 progress.Value = pct;
-                                status.Text = $"Downloading {yearLabel}: {pct}%";
+                                status.Text = $"Downloading {yearLabel}... {pct}%\n{readTotal / 1024 / 1024} MB / {total / 1024 / 1024} MB";
+                            }));
+                        }
+                        else
+                        {
+                            BeginInvoke((MethodInvoker)(() => {
+                                progress.Style = ProgressBarStyle.Marquee;
+                                status.Text = $"Downloading {yearLabel}...\n{readTotal / 1024 / 1024} MB";
                             }));
                         }
                     }
@@ -162,27 +170,15 @@ namespace CarbonLauncher
 
             string yearFlag = year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : null;
             string joinUrl = !string.IsNullOrEmpty(yearFlag)
-                ? $"http://lureon.fit/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}&{yearFlag}=true"
-                : $"http://lureon.fit/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}";
+                ? $"http://skyblox.co/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}&{yearFlag}=true"
+                : $"http://skyblox.co/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}";
 
-            try
-            {
-                var client = new DiscordRpcClient("1479799560762036305");
-                client.Initialize();
-                client.SetPresence(new RichPresence
-                {
-                    Details = $"Playing Place: {placeId}",
-                    State = $"Year: {year}",
-                    Timestamps = Timestamps.Now,
-                    Assets = new Assets { LargeImageKey = "carbon_logo" }
-                });
-            }
-            catch { /* g */ }
 
             Process.Start(new ProcessStartInfo
+
             {
                 FileName = ClientExe,
-                Arguments = $"-a \"https://lureon.fit/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"",
+                Arguments = $"-a \"https://skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"",
                 WorkingDirectory = CurrentYearFolder
             });
 
@@ -190,7 +186,7 @@ namespace CarbonLauncher
 
             new Thread(() => {
                 Thread.Sleep(5000);
-                while (Process.GetProcessesByName("CarbonPlayerBeta").Length > 0) Thread.Sleep(3000);
+                while (Process.GetProcessesByName("SkybloxPlayerBeta").Length > 0) Thread.Sleep(3000);
                 Application.Exit();
             }).Start();
         }
@@ -207,14 +203,14 @@ namespace CarbonLauncher
 
             try
             {
-                using (var ms = new MemoryStream(Properties.Resources.carbon_logo))
+                using (var ms = new MemoryStream(Properties.Resources.Skyblox_logo))
                 {
                     logo.Image = Image.FromStream(ms);
                 }
             }
             catch { }
 
-            status = new Label { Top = 135, Left = 0, Width = 440, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI Semibold", 12f) };
+            status = new Label { Top = 135, Left = 0, Width = 440, Height = 45, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI Semibold", 12f) };
             progress = new ProgressBar { Top = 185, Left = 70, Width = 300, Height = 6 };
             closeBtn = new Label { Text = "✕", Top = 10, Left = 405, Width = 25, Height = 25, Font = new Font("Segoe UI", 12f, FontStyle.Bold), Cursor = Cursors.Hand, TextAlign = ContentAlignment.MiddleCenter };
             closeBtn.Click += (s, e) => Application.Exit();
@@ -249,7 +245,7 @@ namespace CarbonLauncher
         }
 
         private void UpdateStatus(string t) => BeginInvoke((MethodInvoker)(() => status.Text = t));
-        private void RegisterProtocol() { try { var k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\carbon"); k.SetValue("", "URL:Carbon Protocol"); k.SetValue("URL Protocol", ""); k.CreateSubKey(@"shell\open\command").SetValue("", $"\"{AppExePath}\" \"%1\""); } catch { } }
+        private void RegisterProtocol() { try { var k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\bbclient"); k.SetValue("", "URL:Skyblox Protocol"); k.SetValue("URL Protocol", ""); k.CreateSubKey(@"shell\open\command").SetValue("", $"\"{AppExePath}\" \"%1\""); } catch { } }
     }
 
     static class Program
@@ -259,7 +255,7 @@ namespace CarbonLauncher
         {
             Application.EnableVisualStyles();
             string p = null, t = null, y = "2016";
-            if (args.Length > 0 && args[0].StartsWith("carbon://"))
+            if (args.Length > 0 && args[0].StartsWith("bbclient://"))
             {
                 var q = HttpUtility.ParseQueryString(new Uri(args[0]).Query);
                 p = q["place"] ?? q["placeId"]; t = q["ticket"];

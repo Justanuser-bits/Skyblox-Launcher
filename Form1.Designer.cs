@@ -1,4 +1,4 @@
-﻿namespace CarbonLauncher
+namespace SkybloxLauncher
 {
     partial class Form1
     {

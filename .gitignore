@@ -1,0 +1,6 @@
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user
+*.suo
+no you get the compiled version at releases.

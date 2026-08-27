@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("Carbon Launcher")]
+[assembly: AssemblyTitle("Skyblox Launcher")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Carbon Monoxide")]
-[assembly: AssemblyProduct("CarbonLauncher")]
+[assembly: AssemblyCompany("Skyblox Monoxide")]
+[assembly: AssemblyProduct("SkybloxLauncher")]
 [assembly: AssemblyCopyright("FOSS")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
