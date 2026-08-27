@@ -18,7 +18,7 @@ namespace SkybloxLauncher
     public partial class LauncherForm : Form
     {
 
-        private const string CurrentVersion = "1.2.0";
+        private const string CurrentVersion = "1.0.0";
         private const string VersionUrl = "https://skyblox.co/clients/version.txt";
         private const string LauncherDownloadUrl = "https://skyblox.co/clients/SkybloxLauncher.exe";
 
@@ -31,7 +31,7 @@ namespace SkybloxLauncher
         private readonly string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Skyblox");
 
         private string CurrentYearFolder => Path.Combine(appData, year.Contains("2021") ? @"2021\2021" : year.Contains("2020") ? @"2020\2020" : @"2016\2016");
-        private string ClientExe => Path.Combine(CurrentYearFolder, "RobloxPlayerBeta.exe");
+        private string ClientExe => Path.Combine(CurrentYearFolder, year.Contains("2020") ? "CarbonPlayerBeta.exe" : "RobloxPlayerBeta.exe");
         private string AppExePath => Application.ExecutablePath;
         
         private ProgressBar progress;
@@ -108,7 +108,8 @@ namespace SkybloxLauncher
                 if (!this.year.Contains(years[i]) && !isRepairMode) continue;
 
                 string path = Path.Combine(appData, years[i]);
-                string exePath = Path.Combine(path, years[i], "RobloxPlayerBeta.exe");
+                string exeName = years[i].Contains("2020") ? "CarbonPlayerBeta.exe" : "RobloxPlayerBeta.exe";
+                string exePath = Path.Combine(path, years[i], exeName);
 
                 if (!File.Exists(exePath) || (isRepairMode && year.Contains(years[i])))
                 {
