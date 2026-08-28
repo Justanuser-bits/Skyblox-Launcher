@@ -246,7 +246,7 @@ namespace SkybloxLauncher
         }
 
         private void UpdateStatus(string t) => BeginInvoke((MethodInvoker)(() => status.Text = t));
-        private void RegisterProtocol() { try { var k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\bbclient"); k.SetValue("", "URL:Skyblox Protocol"); k.SetValue("URL Protocol", ""); k.CreateSubKey(@"shell\open\command").SetValue("", $"\"{AppExePath}\" \"%1\""); } catch { } }
+        private void RegisterProtocol() { try { var k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\sclient"); k.SetValue("", "URL:Skyblox Protocol"); k.SetValue("URL Protocol", ""); k.CreateSubKey(@"shell\open\command").SetValue("", $"\"{AppExePath}\" \"%1\""); } catch { } }
     }
 
     static class Program
@@ -256,7 +256,7 @@ namespace SkybloxLauncher
         {
             Application.EnableVisualStyles();
             string p = null, t = null, y = "2016";
-            if (args.Length > 0 && args[0].StartsWith("bbclient://"))
+            if (args.Length > 0 && args[0].ToLower().StartsWith("sclient://"))
             {
                 var q = HttpUtility.ParseQueryString(new Uri(args[0]).Query);
                 p = q["place"] ?? q["placeId"]; t = q["ticket"];
