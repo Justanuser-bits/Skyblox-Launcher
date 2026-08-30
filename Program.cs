@@ -82,7 +82,7 @@ namespace SkybloxLauncher
                 using (var client = new HttpClient())
                 {
                     string latest = (await client.GetStringAsync($"{VersionUrl}?t={DateTime.Now.Ticks}")).Trim();
-                    if (latest != CurrentVersion)
+                    if (CurrentVersion != "DEBUG" && latest != CurrentVersion)
                     {
                         UpdateStatus($"Updating to v{latest}...");
                         byte[] newExe = await client.GetByteArrayAsync(LauncherDownloadUrl);
