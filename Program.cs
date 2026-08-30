@@ -18,7 +18,11 @@ namespace SkybloxLauncher
     public partial class LauncherForm : Form
     {
 
+#if DEBUG
+        private const string CurrentVersion = "DEBUG";
+#else
         private const string CurrentVersion = "1.0.1";
+#endif
         private const string VersionUrl = "https://skyblox.co/clients/version.txt";
         private const string LauncherDownloadUrl = "https://skyblox.co/clients/SkybloxLauncher.exe";
 
