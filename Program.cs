@@ -21,7 +21,7 @@ namespace SkybloxLauncher
 #if DEBUG
         private const string CurrentVersion = "DEBUG";
 #else
-        private const string CurrentVersion = "1.0.1";
+        private const string CurrentVersion = "1.2.0";
 #endif
         private const string VersionUrl = "https://skyblox.co/clients/version.txt";
         private const string LauncherDownloadUrl = "https://skyblox.co/clients/SkybloxLauncher.exe";
