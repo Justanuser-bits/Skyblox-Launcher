@@ -175,11 +175,16 @@ namespace SkybloxLauncher
                 : $"http://skyblox.co/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}";
 
 
-            Process.Start(new ProcessStartInfo
+#if DEBUG
+            string args = $"-console -a \"https://skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
+#else
+            string args = $"-a \"https://skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
+#endif
 
+            Process.Start(new ProcessStartInfo
             {
                 FileName = ClientExe,
-                Arguments = $"-a \"https://skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"",
+                Arguments = args,
                 WorkingDirectory = CurrentYearFolder
             });
 
