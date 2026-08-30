@@ -21,7 +21,7 @@ namespace SkybloxLauncher
 #if DEBUG
         private const string CurrentVersion = "DEBUG";
 #else
-        private const string CurrentVersion = "1.2.0";
+        private const string CurrentVersion = "1.0.1";
 #endif
         private const string VersionUrl = "https://skyblox.co/clients/version.txt";
         private const string LauncherDownloadUrl = "https://skyblox.co/clients/SkybloxLauncher.exe";
@@ -81,8 +81,9 @@ namespace SkybloxLauncher
             {
                 using (var client = new HttpClient())
                 {
-                    string latest = (await client.GetStringAsync($"{VersionUrl}?t={DateTime.Now.Ticks}")).Trim();
-                    if (CurrentVersion != "DEBUG" && latest != CurrentVersion)
+                    string latest = (await client.GetStringAsync($"{VersionUrl}?t={DateTime.Now.Ticks}")).Trim().Replace("v", "");
+                    string current = CurrentVersion.Replace("v", "");
+                    if (CurrentVersion != "DEBUG" && latest != current)
                     {
                         UpdateStatus($"Updating to v{latest}...");
                         byte[] newExe = await client.GetByteArrayAsync(LauncherDownloadUrl);
