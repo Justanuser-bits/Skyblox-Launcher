@@ -191,11 +191,7 @@ namespace SkybloxLauncher
             if (yearFlag == "2015")
             {
                 string scriptUrl = $"http://skyblox.co/game/Join.ashx?placeid={placeId}&ticket={ticket}";
-#if DEBUG
-                args = $"--play -console -a \"http://skyblox.co/Login/Negotiate.ashx\" -j \"{scriptUrl}\" -t \"{ticket}\"";
-#else
                 args = $"--play -a \"http://skyblox.co/Login/Negotiate.ashx\" -j \"{scriptUrl}\" -t \"{ticket}\"";
-#endif
             }
 
             Process.Start(new ProcessStartInfo
