@@ -229,9 +229,9 @@ namespace SkybloxLauncher
             closeBtn = new Label { Text = "✕", Top = 10, Left = 405, Width = 25, Height = 25, Font = new Font("Segoe UI", 12f, FontStyle.Bold), Cursor = Cursors.Hand, TextAlign = ContentAlignment.MiddleCenter };
             closeBtn.Click += (s, e) => Application.Exit();
 
-            var footer = new Label { Name = "footer", Text = "Hold SHIFT to repair | v1.2.0", Top = 245, Left = 0, Width = 440, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 8f) };
+            var footer = new Label { Name = "footer", Text = $"Hold SHIFT to repair | v{CurrentVersion}", Top = 245, Left = 0, Width = 440, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 8f) };
 
-            var vers = new Label { Name = "vers", Text = "v1.2.0", Top = 245, Left = 0, Width = 440, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 8f) };
+            var vers = new Label { Name = "vers", Text = $"v{CurrentVersion}", Top = 245, Left = 0, Width = 440, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 8f) };
 
             this.Controls.AddRange(new Control[] { logo, status, progress, closeBtn, footer });
             SyncWithWindowsTheme();
