@@ -192,9 +192,9 @@ namespace SkybloxLauncher
             {
                 string scriptUrl = $"http://skyblox.co/game/Join.ashx?placeid={placeId}&ticket={ticket}";
 #if DEBUG
-                args = $"-console -a \"http://skyblox.co/Login/Negotiate.ashx\" -script \"{scriptUrl}\" -t \"{ticket}\"";
+                args = $"--play -console -a \"http://skyblox.co/Login/Negotiate.ashx\" -j \"{scriptUrl}\" -t \"{ticket}\"";
 #else
-                args = $"-a \"http://skyblox.co/Login/Negotiate.ashx\" -script \"{scriptUrl}\" -t \"{ticket}\"";
+                args = $"--play -a \"http://skyblox.co/Login/Negotiate.ashx\" -j \"{scriptUrl}\" -t \"{ticket}\"";
 #endif
             }
 
