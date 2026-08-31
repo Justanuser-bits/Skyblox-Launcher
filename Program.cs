@@ -183,9 +183,9 @@ namespace SkybloxLauncher
 
 
 #if DEBUG
-            string args = $"-console -a \"https://skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
+            string args = $"-console -a \"http://skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
 #else
-            string args = $"-a \"https://skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
+            string args = $"-a \"http://skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
 #endif
 
             Process.Start(new ProcessStartInfo
