@@ -118,9 +118,11 @@ namespace SkybloxLauncher
 
                 if (!File.Exists(exePath) || (isRepairMode && year.Contains(years[i])))
                 {
-                    UpdateStatus($"Downloaing {years[i]}...");
+                    bool isUpdate = File.Exists(exePath);
+                    string actionStr = isUpdate ? "Updating" : "Downloading";
+                    UpdateStatus($"{actionStr} {years[i]}...");
                     string zip = Path.Combine(appData, "temp.zip");
-                    await DownloadFile(urls[i], zip, years[i]);
+                    await DownloadFile(urls[i], zip, years[i], actionStr);
 
                     UpdateStatus($"Extracting {years[i]}...");
                     if (Directory.Exists(path)) Directory.Delete(path, true);
@@ -130,7 +132,7 @@ namespace SkybloxLauncher
             }
         }
 
-        private async Task DownloadFile(string url, string dest, string yearLabel)
+        private async Task DownloadFile(string url, string dest, string yearLabel, string actionStr)
         {
             using (var client = new HttpClient())
             using (var res = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
@@ -151,14 +153,14 @@ namespace SkybloxLauncher
                             BeginInvoke((MethodInvoker)(() => {
                                 progress.Style = ProgressBarStyle.Blocks;
                                 progress.Value = pct;
-                                status.Text = $"Downloading {yearLabel}... {pct}%\n{readTotal / 1024 / 1024} MB / {total / 1024 / 1024} MB";
+                                status.Text = $"{actionStr} {yearLabel}... {pct}%\n{readTotal / 1024 / 1024} MB / {total / 1024 / 1024} MB";
                             }));
                         }
                         else
                         {
                             BeginInvoke((MethodInvoker)(() => {
                                 progress.Style = ProgressBarStyle.Marquee;
-                                status.Text = $"Downloading {yearLabel}...\n{readTotal / 1024 / 1024} MB";
+                                status.Text = $"{actionStr} {yearLabel}...\n{readTotal / 1024 / 1024} MB";
                             }));
                         }
                     }
@@ -207,6 +209,7 @@ namespace SkybloxLauncher
             this.ClientSize = new Size(440, 280);
             this.FormBorderStyle = FormBorderStyle.None;
             this.StartPosition = FormStartPosition.CenterScreen;
+            try { this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             this.MouseDown += (s, e) => { if (e.Button == MouseButtons.Left) { ReleaseCapture(); SendMessage(Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0); } };
 
             var logo = new PictureBox { SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(180, 90), Top = 30, Left = 130, Cursor = Cursors.Hand };
