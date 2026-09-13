@@ -2,7 +2,7 @@
 
 This is the complete, full source of the Skyblox launcher.
 
-Made with Carbon Launcher source since im lazy and a skid
+Made with Carbon Launcher source since im lazy.
 
 https://skyblox.co/
 
