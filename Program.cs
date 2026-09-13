@@ -21,7 +21,7 @@ namespace SkybloxLauncher
 #if DEBUG
         private const string CurrentVersion = "DEBUG";
 #else
-        private const string CurrentVersion = "1.0.2";
+        private const string CurrentVersion = "1.0.3";
 #endif
         private const string VersionUrl = "https://skyblox.co/clients/version.txt";
         private const string LauncherDownloadUrl = "https://skyblox.co/clients/SkybloxLauncher.exe";
@@ -34,7 +34,7 @@ namespace SkybloxLauncher
         private readonly string placeId, ticket, year;
         private readonly string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Skyblox");
 
-        private string CurrentYearFolder => Path.Combine(appData, year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2015") ? "2015" : "2016");
+        private string CurrentYearFolder => Path.Combine(appData, year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : "2016");
         private string ClientExe => Path.Combine(CurrentYearFolder, "SkybloxPlayerBeta.exe");
         private string AppExePath => Application.ExecutablePath;
         
@@ -101,33 +101,60 @@ namespace SkybloxLauncher
 
         private async Task InstallAllMissingClients()
         {
-            string[] years = { "2015", "2016", "2020" };
-            string[] urls = {
-                "http://skyblox.co/clients/15client.zip",
-                "http://skyblox.co/clients/16client.zip",
-                "http://skyblox.co/clients/20client.zip"
-            };
-
-            for (int i = 0; i < years.Length; i++)
+            string[] years = { "2015", "2016", "2017", "2020" };
+            
+            using (var client = new HttpClient())
             {
-                if (!this.year.Contains(years[i]) && !isRepairMode) continue;
+                string remoteHistory = "";
+                try { remoteHistory = await client.GetStringAsync("http://skyblox.co/clients/DeployHistory.txt"); } catch { }
 
-                string path = Path.Combine(appData, years[i]);
-                string exeName = "SkybloxPlayerBeta.exe";
-                string exePath = Path.Combine(path, exeName);
+                string localHistoryPath = Path.Combine(appData, "DeployHistory.txt");
+                string localHistory = File.Exists(localHistoryPath) ? File.ReadAllText(localHistoryPath) : "";
 
-                if (!File.Exists(exePath) || (isRepairMode && year.Contains(years[i])))
+                for (int i = 0; i < years.Length; i++)
                 {
-                    bool isUpdate = File.Exists(exePath);
-                    string actionStr = isUpdate ? "Updating" : "Downloading";
-                    UpdateStatus($"{actionStr} {years[i]}...");
-                    string zip = Path.Combine(appData, "temp.zip");
-                    await DownloadFile(urls[i], zip, years[i], actionStr);
+                    if (!this.year.Contains(years[i]) && !isRepairMode) continue;
 
-                    UpdateStatus($"Extracting {years[i]}...");
-                    if (Directory.Exists(path)) Directory.Delete(path, true);
-                    ZipFile.ExtractToDirectory(zip, path);
-                    File.Delete(zip);
+                    string path = Path.Combine(appData, years[i]);
+                    string exePath = Path.Combine(path, "SkybloxPlayerBeta.exe");
+                    string urlZip = $"http://skyblox.co/clients/{years[i].Substring(2, 2)}client.zip";
+
+                    string remoteHash = "";
+                    if (!string.IsNullOrEmpty(remoteHistory))
+                        foreach (var line in remoteHistory.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+                            if (line.Contains(years[i])) { remoteHash = line.Trim(); break; }
+
+                    string localHash = "";
+                    if (!string.IsNullOrEmpty(localHistory))
+                        foreach (var line in localHistory.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+                            if (line.Contains(years[i])) { localHash = line.Trim(); break; }
+
+                    bool hashMismatch = !string.IsNullOrEmpty(remoteHash) && remoteHash != localHash;
+
+                    if (!File.Exists(exePath) || (isRepairMode && year.Contains(years[i])) || hashMismatch)
+                    {
+                        bool isUpdate = File.Exists(exePath);
+                        string actionStr = isUpdate ? "Updating" : "Downloading";
+                        UpdateStatus($"{actionStr} {years[i]}...");
+                        string zip = Path.Combine(appData, "temp.zip");
+                        try { await DownloadFile(urlZip, zip, years[i], actionStr); } catch { continue; }
+
+                        UpdateStatus($"Extracting {years[i]}...");
+                        if (Directory.Exists(path)) Directory.Delete(path, true);
+                        ZipFile.ExtractToDirectory(zip, path);
+                        File.Delete(zip);
+                        
+                        // Safely update the local DeployHistory.txt for ONLY this year
+                        if (!string.IsNullOrEmpty(remoteHash))
+                        {
+                            if (!string.IsNullOrEmpty(localHash))
+                                localHistory = localHistory.Replace(localHash, remoteHash);
+                            else
+                                localHistory += "\n" + remoteHash;
+                                
+                            File.WriteAllText(localHistoryPath, localHistory.Trim());
+                        }
+                    }
                 }
             }
         }
@@ -176,7 +203,7 @@ namespace SkybloxLauncher
                 return;
             }
 
-            string yearFlag = year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2015") ? "2015" : null;
+            string yearFlag = year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : null;
             string joinUrl = !string.IsNullOrEmpty(yearFlag)
                 ? $"http://skyblox.co/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}&{yearFlag}=true"
                 : $"http://skyblox.co/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}";
@@ -278,7 +305,7 @@ namespace SkybloxLauncher
             {
                 var q = HttpUtility.ParseQueryString(new Uri(args[0]).Query);
                 p = q["place"] ?? q["placeId"]; t = q["ticket"];
-                y = (q["2021"] == "true" || q["year"] == "2021") ? "2021" : (q["2020"] == "true" || q["year"] == "2020") ? "2020" : (q["2015"] == "true" || q["year"] == "2015") ? "2015" : "2016";
+                y = (q["2021"] == "true" || q["year"] == "2021") ? "2021" : (q["2020"] == "true" || q["year"] == "2020") ? "2020" : (q["2017"] == "true" || q["year"] == "2017") ? "2017" : (q["2015"] == "true" || q["year"] == "2015") ? "2015" : "2016";
             }
             Application.Run(new LauncherForm(p, t, y));
         }
