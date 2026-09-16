@@ -34,7 +34,7 @@ namespace SkybloxLauncher
         private readonly string placeId, ticket, year;
         private readonly string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Skyblox");
 
-        private string CurrentYearFolder => Path.Combine(appData, year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : "2016");
+        private string CurrentYearFolder => Path.Combine(appData, year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2018") ? "2018" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : "2016");
         private string ClientExe => Path.Combine(CurrentYearFolder, "SkybloxPlayerBeta.exe");
         private string AppExePath => Application.ExecutablePath;
         
@@ -101,12 +101,12 @@ namespace SkybloxLauncher
 
         private async Task InstallAllMissingClients()
         {
-            string[] years = { "2015", "2016", "2017", "2020" };
+            string[] years = { "2015", "2016", "2017", "2018", "2020" };
             
             using (var client = new HttpClient())
             {
                 string remoteHistory = "";
-                try { remoteHistory = await client.GetStringAsync("http://skyblox.co/clients/DeployHistory.txt"); } catch { }
+                try { remoteHistory = await client.GetStringAsync("http://www.skyblox.co/clients/DeployHistory.txt"); } catch { }
 
                 string localHistoryPath = Path.Combine(appData, "DeployHistory.txt");
                 string localHistory = File.Exists(localHistoryPath) ? File.ReadAllText(localHistoryPath) : "";
@@ -117,7 +117,7 @@ namespace SkybloxLauncher
 
                     string path = Path.Combine(appData, years[i]);
                     string exePath = Path.Combine(path, "SkybloxPlayerBeta.exe");
-                    string urlZip = $"http://skyblox.co/clients/{years[i].Substring(2, 2)}client.zip";
+                    string urlZip = $"http://www.skyblox.co/clients/{years[i].Substring(2, 2)}client.zip";
 
                     string remoteHash = "";
                     if (!string.IsNullOrEmpty(remoteHistory))
@@ -203,22 +203,65 @@ namespace SkybloxLauncher
                 return;
             }
 
-            string yearFlag = year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : null;
+            string yearFlag = year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2018") ? "2018" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : null;
             string joinUrl = !string.IsNullOrEmpty(yearFlag)
-                ? $"http://skyblox.co/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}&{yearFlag}=true"
-                : $"http://skyblox.co/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}";
+                ? $"http://www.skyblox.co/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}&{yearFlag}=true"
+                : $"http://www.skyblox.co/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}";
 
 
 #if DEBUG
-            string args = $"-console -a \"http://skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
+            string args = $"-console -a \"http://www.skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
 #else
-            string args = $"-a \"http://skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
+            string args = $"-a \"http://www.skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
 #endif
 
             if (yearFlag == "2015")
             {
-                args = $"--play -a \"http://skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
+                args = $"--play -a \"http://www.skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
             }
+
+#if DEBUG
+            if (yearFlag != "2015")
+            {
+                try
+                {
+                    using (var fs = new FileStream(ClientExe, FileMode.Open, FileAccess.ReadWrite))
+                    {
+                        var br = new BinaryReader(fs);
+                        fs.Position = 0x3C;
+                        var peOffset = br.ReadInt32();
+                        fs.Position = peOffset + 0x5C;
+                        var bw = new BinaryWriter(fs);
+                        bw.Write((short)3); // Console subsystem
+                    }
+                }
+                catch { }
+            }
+#else
+            // Release: ensure the client EXE is NOT in console mode
+            // (Debug builds patch it to 3 on disk; undo that here)
+            if (yearFlag != "2015")
+            {
+                try
+                {
+                    using (var fs = new FileStream(ClientExe, FileMode.Open, FileAccess.ReadWrite))
+                    {
+                        var br = new BinaryReader(fs);
+                        fs.Position = 0x3C;
+                        var peOffset = br.ReadInt32();
+                        fs.Position = peOffset + 0x5C;
+                        short subsystem = br.ReadInt16();
+                        if (subsystem == 3) // Console — patch back to Windows GUI
+                        {
+                            fs.Position = peOffset + 0x5C;
+                            var bw = new BinaryWriter(fs);
+                            bw.Write((short)2);
+                        }
+                    }
+                }
+                catch { }
+            }
+#endif
 
             Process.Start(new ProcessStartInfo
             {
@@ -305,7 +348,7 @@ namespace SkybloxLauncher
             {
                 var q = HttpUtility.ParseQueryString(new Uri(args[0]).Query);
                 p = q["place"] ?? q["placeId"]; t = q["ticket"];
-                y = (q["2021"] == "true" || q["year"] == "2021") ? "2021" : (q["2020"] == "true" || q["year"] == "2020") ? "2020" : (q["2017"] == "true" || q["year"] == "2017") ? "2017" : (q["2015"] == "true" || q["year"] == "2015") ? "2015" : "2016";
+                y = (q["2021"] == "true" || q["year"] == "2021") ? "2021" : (q["2020"] == "true" || q["year"] == "2020") ? "2020" : (q["2018"] == "true" || q["year"] == "2018") ? "2018" : (q["2017"] == "true" || q["year"] == "2017") ? "2017" : (q["2015"] == "true" || q["year"] == "2015") ? "2015" : "2016";
             }
             Application.Run(new LauncherForm(p, t, y));
         }
