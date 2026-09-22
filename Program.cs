@@ -146,19 +146,13 @@ namespace SkybloxLauncher
                         if (Directory.Exists(path)) Directory.Delete(path, true);
                         ZipFile.ExtractToDirectory(zip, path);
                         File.Delete(zip);
-                        
-                        // Safely update the local DeployHistory.txt for ONLY this year
-                        if (!string.IsNullOrEmpty(remoteHash))
-                        {
-                            if (!string.IsNullOrEmpty(localHash))
-                                localHistory = localHistory.Replace(localHash, remoteHash);
-                            else
-                                localHistory += "\n" + remoteHash;
-                                
-                            File.WriteAllText(localHistoryPath, localHistory.Trim());
-                        }
                     }
                 }
+
+                // Always write the full remote DeployHistory.txt locally after the loop —
+                // keeps the local copy in sync even when nothing was re-downloaded.
+                if (!string.IsNullOrEmpty(remoteHistory))
+                    File.WriteAllText(localHistoryPath, remoteHistory.Trim());
             }
         }
 
