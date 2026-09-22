@@ -23,8 +23,11 @@ namespace SkybloxLauncher
 #else
         private const string CurrentVersion = "1.0.3";
 #endif
-        private const string VersionUrl = "https://skyblox.co/clients/version.txt";
-        private const string LauncherDownloadUrl = "https://skyblox.co/clients/SkybloxLauncher.exe";
+        // fix #1/#7: one consistent base, always https
+        private const string BaseUrl             = "https://skyblox.co";
+        private const string VersionUrl          = BaseUrl + "/clients/version.txt";
+        private const string LauncherDownloadUrl = BaseUrl + "/clients/SkybloxLauncher.exe";
+        private const string DeployHistoryUrl    = BaseUrl + "/clients/DeployHistory.txt";
 
         public const int WM_NCLBUTTONDOWN = 0xA1;
         public const int HT_CAPTION = 0x2;
@@ -39,7 +42,7 @@ namespace SkybloxLauncher
         private string AppExePath => Application.ExecutablePath;
         
         private ProgressBar progress;
-        private Label status, closeBtn;
+        private Label status, closeBtn, repairLink;
         private bool isDarkMode = false;
         private bool isRepairMode = false;
 
@@ -64,11 +67,15 @@ namespace SkybloxLauncher
                 if (!Directory.Exists(appData)) Directory.CreateDirectory(appData);
                 RegisterProtocol();
 
-                // previous problem: we didnt install 2020 and 2021 only 2016 so use InstallAllMissingClients to ensure we have our clients
                 await InstallAllMissingClients();
 
                 if (!string.IsNullOrEmpty(placeId))
+                {
+                    // fix #4: briefly show "up to date" before launching
+                    UpdateStatus("All clients up to date!\nLaunching...");
+                    await Task.Delay(800);
                     LaunchGame();
+                }
                 else
                     UpdateStatus("Finished installing all clients. You may now exit");
             }
@@ -106,18 +113,19 @@ namespace SkybloxLauncher
             using (var client = new HttpClient())
             {
                 string remoteHistory = "";
-                try { remoteHistory = await client.GetStringAsync("http://skyblox.co/clients/DeployHistory.txt"); } catch { }
+                try { remoteHistory = await client.GetStringAsync(DeployHistoryUrl); } catch { }
 
                 string localHistoryPath = Path.Combine(appData, "DeployHistory.txt");
                 string localHistory = File.Exists(localHistoryPath) ? File.ReadAllText(localHistoryPath) : "";
 
                 for (int i = 0; i < years.Length; i++)
                 {
-                    // Always check hash for all installed years.
                     bool isTargetYear = this.year.Contains(years[i]);
-                    string path = Path.Combine(appData, years[i]);
-                    string exePath = Path.Combine(path, "SkybloxPlayerBeta.exe");
-                    string urlZip = $"http://www.skyblox.co/clients/{years[i].Substring(2, 2)}client.zip";
+                    string path     = Path.Combine(appData, years[i]);
+                    string exePath  = Path.Combine(path, "SkybloxPlayerBeta.exe");
+
+                    // fix #7: https, fix #1: consistent base (no www)
+                    string urlZip = $"{BaseUrl}/clients/{years[i].Substring(2, 2)}client.zip";
 
                     // Skip years that aren't installed AND aren't the launching year (unless repairing)
                     if (!isTargetYear && !isRepairMode && !File.Exists(exePath)) continue;
@@ -136,11 +144,28 @@ namespace SkybloxLauncher
 
                     if (!File.Exists(exePath) || (isRepairMode && year.Contains(years[i])) || hashMismatch)
                     {
-                        bool isUpdate = File.Exists(exePath);
+                        bool isUpdate   = File.Exists(exePath);
                         string actionStr = isUpdate ? "Updating" : "Downloading";
                         UpdateStatus($"{actionStr} {years[i]}...");
-                        string zip = Path.Combine(appData, "temp.zip");
-                        try { await DownloadFile(urlZip, zip, years[i], actionStr); } catch { continue; }
+
+                        // fix #2: year-specific zip name so concurrent/sequential years don't collide
+                        string zip = Path.Combine(appData, $"temp_{years[i]}.zip");
+
+                        // fix #6: show error instead of silently swallowing it
+                        try
+                        {
+                            await DownloadFile(urlZip, zip, years[i], actionStr);
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show(
+                                $"Failed to download the {years[i]} client.\n\n{ex.Message}\n\nPlease check your internet connection and try again.",
+                                "Download Error",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Error);
+                            if (File.Exists(zip)) File.Delete(zip);
+                            continue;
+                        }
 
                         UpdateStatus($"Extracting {years[i]}...");
                         if (Directory.Exists(path)) Directory.Delete(path, true);
@@ -161,6 +186,7 @@ namespace SkybloxLauncher
             using (var client = new HttpClient())
             using (var res = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
             {
+                res.EnsureSuccessStatusCode();
                 var total = res.Content.Headers.ContentLength ?? -1L;
                 using (var fs = new FileStream(dest, FileMode.Create))
                 using (var s = await res.Content.ReadAsStreamAsync())
@@ -196,21 +222,16 @@ namespace SkybloxLauncher
         {
             if (!File.Exists(ClientExe))
             {
-                MessageBox.Show($"Missing: {ClientExe}\nHold Shift while opening to Repair.");
+                MessageBox.Show($"Missing: {ClientExe}\nClick 'Repair' in the launcher footer or hold Shift while opening.");
                 return;
             }
 
             string yearFlag = year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2018") ? "2018" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : null;
             string joinUrl = !string.IsNullOrEmpty(yearFlag)
-                ? $"http://www.skyblox.co/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}&{yearFlag}=true"
-                : $"http://www.skyblox.co/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}";
+                ? $"{BaseUrl}/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}&{yearFlag}=true"
+                : $"{BaseUrl}/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}";
 
-
-#if DEBUG
-            string args = $"-a \"http://www.skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
-#else
-            string args = $"-a \"http://www.skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
-#endif
+            string args = $"-a \"{BaseUrl}/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
 
 #if DEBUG
             if (yearFlag != "2015")
@@ -230,8 +251,6 @@ namespace SkybloxLauncher
                 catch { }
             }
 #else
-            // Release: ensure the client EXE is NOT in console mode
-            // (Debug builds patch it to 3 on disk; undo that here)
             if (yearFlag != "2015")
             {
                 try
@@ -243,7 +262,7 @@ namespace SkybloxLauncher
                         var peOffset = br.ReadInt32();
                         fs.Position = peOffset + 0x5C;
                         short subsystem = br.ReadInt16();
-                        if (subsystem == 3) // Console — patch back to Windows GUI
+                        if (subsystem == 3)
                         {
                             fs.Position = peOffset + 0x5C;
                             var bw = new BinaryWriter(fs);
@@ -296,17 +315,32 @@ namespace SkybloxLauncher
             closeBtn = new Label { Text = "✕", Top = 10, Left = 405, Width = 25, Height = 25, Font = new Font("Segoe UI", 12f, FontStyle.Bold), Cursor = Cursors.Hand, TextAlign = ContentAlignment.MiddleCenter };
             closeBtn.Click += (s, e) => Application.Exit();
 
-            var footer = new Label { Name = "footer", Text = $"Hold SHIFT to repair | v{CurrentVersion}", Top = 245, Left = 0, Width = 440, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 8f) };
+            // fix #5: clickable repair link instead of hidden shift trick
+            repairLink = new Label
+            {
+                Name = "repairLink",
+                Text = "Repair",
+                Top = 245, Left = 0, Width = 440,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font("Segoe UI", 8f, FontStyle.Underline),
+                Cursor = Cursors.Hand,
+                ForeColor = Color.CornflowerBlue
+            };
+            repairLink.Click += (s, e) =>
+            {
+                isRepairMode = true;
+                Task.Run(StartLauncher);
+            };
 
-            var vers = new Label { Name = "vers", Text = $"v{CurrentVersion}", Top = 245, Left = 0, Width = 440, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 8f) };
+            var footer = new Label { Name = "footer", Text = $"v{CurrentVersion}", Top = 258, Left = 0, Width = 440, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 8f) };
 
-            this.Controls.AddRange(new Control[] { logo, status, progress, closeBtn, footer });
+            this.Controls.AddRange(new Control[] { logo, status, progress, closeBtn, repairLink, footer });
             SyncWithWindowsTheme();
         }
 
         private void ApplyTheme()
         {
-            Color bg = isDarkMode ? Color.FromArgb(25, 25, 25) : Color.White;
+            Color bg   = isDarkMode ? Color.FromArgb(25, 25, 25) : Color.White;
             Color text = isDarkMode ? Color.WhiteSmoke : Color.FromArgb(40, 40, 40);
             this.BackColor = bg;
             status.ForeColor = text;
