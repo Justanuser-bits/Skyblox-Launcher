@@ -106,18 +106,21 @@ namespace SkybloxLauncher
             using (var client = new HttpClient())
             {
                 string remoteHistory = "";
-                try { remoteHistory = await client.GetStringAsync("http://www.skyblox.co/clients/DeployHistory.txt"); } catch { }
+                try { remoteHistory = await client.GetStringAsync("http://skyblox.co/clients/DeployHistory.txt"); } catch { }
 
                 string localHistoryPath = Path.Combine(appData, "DeployHistory.txt");
                 string localHistory = File.Exists(localHistoryPath) ? File.ReadAllText(localHistoryPath) : "";
 
                 for (int i = 0; i < years.Length; i++)
                 {
-                    if (!this.year.Contains(years[i]) && !isRepairMode) continue;
-
+                    // Always check hash for all installed years.
+                    bool isTargetYear = this.year.Contains(years[i]);
                     string path = Path.Combine(appData, years[i]);
                     string exePath = Path.Combine(path, "SkybloxPlayerBeta.exe");
                     string urlZip = $"http://www.skyblox.co/clients/{years[i].Substring(2, 2)}client.zip";
+
+                    // Skip years that aren't installed AND aren't the launching year (unless repairing)
+                    if (!isTargetYear && !isRepairMode && !File.Exists(exePath)) continue;
 
                     string remoteHash = "";
                     if (!string.IsNullOrEmpty(remoteHistory))
@@ -210,15 +213,10 @@ namespace SkybloxLauncher
 
 
 #if DEBUG
-            string args = $"-console -a \"http://www.skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
+            string args = $"-a \"http://www.skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
 #else
             string args = $"-a \"http://www.skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
 #endif
-
-            if (yearFlag == "2015")
-            {
-                args = $"--play -a \"http://www.skyblox.co/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
-            }
 
 #if DEBUG
             if (yearFlag != "2015")
