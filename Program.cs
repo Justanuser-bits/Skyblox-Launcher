@@ -19,7 +19,7 @@ namespace SkybloxLauncher
 #if DEBUG
         private const string CurrentVersion = "DEBUG";
 #else
-        private const string CurrentVersion = "1.0.3";
+        private const string CurrentVersion = "1.0.4";
 #endif        
         private const string BaseUrl             = "https://skyblox.co";
         
@@ -321,8 +321,8 @@ namespace SkybloxLauncher
             {
                 Name = "repairLink",
                 Text = "Repair",
-                Top = 258, Left = 10, Width = 50,
-                TextAlign = ContentAlignment.BottomLeft,
+                Top = 245, Left = 0, Width = 440,
+                TextAlign = ContentAlignment.MiddleCenter,
                 Font = new Font("Segoe UI", 8f, FontStyle.Underline),
                 Cursor = Cursors.Hand,
                 ForeColor = Color.CornflowerBlue
