@@ -1,5 +1,3 @@
-// im tired
-
 using System;
 using System.Diagnostics;
 using System.Drawing;
@@ -22,10 +20,9 @@ namespace SkybloxLauncher
         private const string CurrentVersion = "DEBUG";
 #else
         private const string CurrentVersion = "1.0.3";
-#endif
-        // fix #1/#7: one consistent base, always https
+#endif        
         private const string BaseUrl             = "https://skyblox.co";
-        private const string VersionUrl          = BaseUrl + "/clients/version.txt";
+        
         private const string LauncherDownloadUrl = BaseUrl + "/clients/SkybloxLauncher.exe";
         private const string DeployHistoryUrl    = BaseUrl + "/clients/DeployHistory.txt";
 
@@ -71,7 +68,6 @@ namespace SkybloxLauncher
 
                 if (!string.IsNullOrEmpty(placeId))
                 {
-                    // fix #4: briefly show "up to date" before launching
                     UpdateStatus("All clients up to date!\nLaunching...");
                     await Task.Delay(800);
                     LaunchGame();
@@ -82,25 +78,36 @@ namespace SkybloxLauncher
             catch (Exception ex) { MessageBox.Show("Error: " + ex.Message); }
         }
 
-        private async Task CheckForLauncherUpdates()
+                private async Task CheckForLauncherUpdates()
         {
             try
             {
                 using (var client = new HttpClient())
                 {
-                    string latest = (await client.GetStringAsync($"{VersionUrl}?t={DateTime.Now.Ticks}")).Trim();
-                    if (CurrentVersion != "DEBUG" && latest != CurrentVersion)
+                    string history = await client.GetStringAsync($"{DeployHistoryUrl}?t={DateTime.Now.Ticks}");
+                    string remoteHash = "";
+                    foreach (var line in history.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+                        if (line.StartsWith("Launcher:")) { remoteHash = line.Trim(); break; }
+
+                    if (string.IsNullOrEmpty(remoteHash)) return;
+
+                    string localHashPath = Path.Combine(appData, "LauncherHash.txt");
+                    string localHash = File.Exists(localHashPath) ? File.ReadAllText(localHashPath).Trim() : "";
+
+#if !DEBUG
+                    if (localHash != remoteHash)
                     {
-                        UpdateStatus($"Updating to v{latest}...");
+                        UpdateStatus($"Updating launcher...");
                         byte[] newExe = await client.GetByteArrayAsync(LauncherDownloadUrl);
                         string tmpPath = AppExePath + ".tmp";
                         File.WriteAllBytes(tmpPath, newExe);
 
-                        string batch = $"@echo off\ntimeout /t 1\ndel \"{AppExePath}\"\nmove \"{tmpPath}\" \"{AppExePath}\"\nstart \"\" \"{AppExePath}\"\nexit";
+                        string batch = $"@echo off\ntimeout /t 1\ndel \"{AppExePath}\"\nmove \"{tmpPath}\" \"{AppExePath}\"\necho {remoteHash}>\"{localHashPath}\"\nstart \"\" \"{AppExePath}\"\nexit";
                         File.WriteAllText("update.bat", batch);
                         Process.Start(new ProcessStartInfo("update.bat") { CreateNoWindow = true, UseShellExecute = false });
                         Application.Exit();
                     }
+#endif
                 }
             }
             catch { }
@@ -123,8 +130,6 @@ namespace SkybloxLauncher
                     bool isTargetYear = this.year.Contains(years[i]);
                     string path     = Path.Combine(appData, years[i]);
                     string exePath  = Path.Combine(path, "SkybloxPlayerBeta.exe");
-
-                    // fix #7: https, fix #1: consistent base (no www)
                     string urlZip = $"{BaseUrl}/clients/{years[i].Substring(2, 2)}client.zip";
 
                     // Skip years that aren't installed AND aren't the launching year (unless repairing)
@@ -133,12 +138,12 @@ namespace SkybloxLauncher
                     string remoteHash = "";
                     if (!string.IsNullOrEmpty(remoteHistory))
                         foreach (var line in remoteHistory.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
-                            if (line.Contains(years[i])) { remoteHash = line.Trim(); break; }
+                            if (line.StartsWith(years[i] + ":")) { remoteHash = line.Trim(); break; }
 
                     string localHash = "";
                     if (!string.IsNullOrEmpty(localHistory))
                         foreach (var line in localHistory.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
-                            if (line.Contains(years[i])) { localHash = line.Trim(); break; }
+                            if (line.StartsWith(years[i] + ":")) { localHash = line.Trim(); break; }
 
                     bool hashMismatch = !string.IsNullOrEmpty(remoteHash) && remoteHash != localHash;
 
@@ -148,10 +153,8 @@ namespace SkybloxLauncher
                         string actionStr = isUpdate ? "Updating" : "Downloading";
                         UpdateStatus($"{actionStr} {years[i]}...");
 
-                        // fix #2: year-specific zip name so concurrent/sequential years don't collide
                         string zip = Path.Combine(appData, $"temp_{years[i]}.zip");
 
-                        // fix #6: show error instead of silently swallowing it
                         try
                         {
                             await DownloadFile(urlZip, zip, years[i], actionStr);
@@ -174,8 +177,7 @@ namespace SkybloxLauncher
                     }
                 }
 
-                // Always write the full remote DeployHistory.txt locally after the loop —
-                // keeps the local copy in sync even when nothing was re-downloaded.
+                //Always write the full remote DeployHistory.txt locally after the loop keeps the local copy in sync even when nothing was re-downloaded.
                 if (!string.IsNullOrEmpty(remoteHistory))
                     File.WriteAllText(localHistoryPath, remoteHistory.Trim());
             }
@@ -231,7 +233,7 @@ namespace SkybloxLauncher
                 ? $"{BaseUrl}/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}&{yearFlag}=true"
                 : $"{BaseUrl}/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}";
 
-            string args = $"-a \"{BaseUrl}/Login/Negotiate.ashx\" -j \"{joinUrl}\" -t \"{ticket}\"";
+            string args = $"-a \"{BaseUrl.Replace("https://", "http://")}/Login/Negotiate.ashx\" -j \"{joinUrl.Replace("https://", "http://")}\" -t \"{ticket}\"";
 
 #if DEBUG
             if (yearFlag != "2015")
@@ -315,13 +317,12 @@ namespace SkybloxLauncher
             closeBtn = new Label { Text = "✕", Top = 10, Left = 405, Width = 25, Height = 25, Font = new Font("Segoe UI", 12f, FontStyle.Bold), Cursor = Cursors.Hand, TextAlign = ContentAlignment.MiddleCenter };
             closeBtn.Click += (s, e) => Application.Exit();
 
-            // fix #5: clickable repair link instead of hidden shift trick
             repairLink = new Label
             {
                 Name = "repairLink",
                 Text = "Repair",
-                Top = 245, Left = 0, Width = 440,
-                TextAlign = ContentAlignment.MiddleCenter,
+                Top = 258, Left = 10, Width = 50,
+                TextAlign = ContentAlignment.BottomLeft,
                 Font = new Font("Segoe UI", 8f, FontStyle.Underline),
                 Cursor = Cursors.Hand,
                 ForeColor = Color.CornflowerBlue
@@ -381,3 +382,5 @@ namespace SkybloxLauncher
     }
 }
 // fin
+
+
