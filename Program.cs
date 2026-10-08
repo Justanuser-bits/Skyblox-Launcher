@@ -19,7 +19,7 @@ namespace SkybloxLauncher
 #if DEBUG
         private const string CurrentVersion = "DEBUG";
 #else
-        private const string CurrentVersion = "1.0.4";
+        private const string CurrentVersion = "1.0.5";
 #endif        
         private const string BaseUrl             = "https://skyblox.co";
         
@@ -34,7 +34,7 @@ namespace SkybloxLauncher
         private readonly string placeId, ticket, year;
         private readonly string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Skyblox");
 
-        private string CurrentYearFolder => Path.Combine(appData, year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2018") ? "2018" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : "2016");
+        private string CurrentYearFolder => Path.Combine(appData, year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2019") ? "2019" : year.Contains("2018") ? "2018" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : "2016");
         private string ClientExe => Path.Combine(CurrentYearFolder, "SkybloxPlayerBeta.exe");
         private string AppExePath => Application.ExecutablePath;
         
@@ -91,8 +91,12 @@ namespace SkybloxLauncher
 
                     if (string.IsNullOrEmpty(remoteHash)) return;
 
-                    string localHashPath = Path.Combine(appData, "LauncherHash.txt");
-                    string localHash = File.Exists(localHashPath) ? File.ReadAllText(localHashPath).Trim() : "";
+                    string localHistoryPath = Path.Combine(appData, "DeployHistory.txt");
+                    string localHash = "";
+                    if (File.Exists(localHistoryPath)) {
+                        foreach (var line in File.ReadAllText(localHistoryPath).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+                            if (line.StartsWith("Launcher:")) { localHash = line.Trim(); break; }
+                    }
 
 #if !DEBUG
                     if (localHash != remoteHash)
@@ -101,8 +105,16 @@ namespace SkybloxLauncher
                         byte[] newExe = await client.GetByteArrayAsync(LauncherDownloadUrl);
                         string tmpPath = AppExePath + ".tmp";
                         File.WriteAllBytes(tmpPath, newExe);
+                        
+                        // Write the full DeployHistory directly from C# before exiting
+                        if (!Directory.Exists(appData)) Directory.CreateDirectory(appData);
+                        File.WriteAllText(localHistoryPath, history.Trim());
+                        
+                        // Cleanup old file
+                        string oldHashPath = Path.Combine(appData, "LauncherHash.txt");
+                        if (File.Exists(oldHashPath)) File.Delete(oldHashPath);
 
-                        string batch = $"@echo off\ntimeout /t 1\ndel \"{AppExePath}\"\nmove \"{tmpPath}\" \"{AppExePath}\"\necho {remoteHash}>\"{localHashPath}\"\nstart \"\" \"{AppExePath}\"\nexit";
+                        string batch = $"@echo off\ntimeout /t 1\ndel \"{AppExePath}\"\nmove \"{tmpPath}\" \"{AppExePath}\"\nstart \"\" \"{AppExePath}\"\nexit";
                         File.WriteAllText("update.bat", batch);
                         Process.Start(new ProcessStartInfo("update.bat") { CreateNoWindow = true, UseShellExecute = false });
                         Application.Exit();
@@ -115,7 +127,7 @@ namespace SkybloxLauncher
 
         private async Task InstallAllMissingClients()
         {
-            string[] years = { "2015", "2016", "2017", "2018", "2020" };
+            string[] years = { "2015", "2016", "2017", "2018", "2019", "2020" };
             
             using (var client = new HttpClient())
             {
@@ -228,7 +240,7 @@ namespace SkybloxLauncher
                 return;
             }
 
-            string yearFlag = year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2018") ? "2018" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : null;
+            string yearFlag = year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2019") ? "2019" : year.Contains("2018") ? "2018" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : null;
             string joinUrl = !string.IsNullOrEmpty(yearFlag)
                 ? $"{BaseUrl}/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}&{yearFlag}=true"
                 : $"{BaseUrl}/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}";
@@ -282,12 +294,15 @@ namespace SkybloxLauncher
                 Arguments = args,
                 WorkingDirectory = CurrentYearFolder
             });
+            
+            DiscordManager.Initialize(placeId, year, ticket);
 
             this.BeginInvoke((MethodInvoker)delegate { this.Hide(); });
 
             new Thread(() => {
                 Thread.Sleep(5000);
                 while (Process.GetProcessesByName("SkybloxPlayerBeta").Length > 0) Thread.Sleep(3000);
+                DiscordManager.Shutdown();
                 Application.Exit();
             }).Start();
         }
@@ -375,7 +390,7 @@ namespace SkybloxLauncher
             {
                 var q = HttpUtility.ParseQueryString(new Uri(args[0]).Query);
                 p = q["place"] ?? q["placeId"]; t = q["ticket"];
-                y = (q["2021"] == "true" || q["year"] == "2021") ? "2021" : (q["2020"] == "true" || q["year"] == "2020") ? "2020" : (q["2018"] == "true" || q["year"] == "2018") ? "2018" : (q["2017"] == "true" || q["year"] == "2017") ? "2017" : (q["2015"] == "true" || q["year"] == "2015") ? "2015" : "2016";
+                y = (q["2021"] == "true" || q["year"] == "2021") ? "2021" : (q["2020"] == "true" || q["year"] == "2020") ? "2020" : (q["2019"] == "true" || q["year"] == "2019") ? "2019" : (q["2018"] == "true" || q["year"] == "2018") ? "2018" : (q["2017"] == "true" || q["year"] == "2017") ? "2017" : (q["2015"] == "true" || q["year"] == "2015") ? "2015" : "2016";
             }
             Application.Run(new LauncherForm(p, t, y));
         }

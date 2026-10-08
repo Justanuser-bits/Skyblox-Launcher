@@ -1,6 +1,8 @@
 [Bb]in/
 [Oo]bj/
 .vs/
+.git/
 *.user
 *.suo
-update-github.bat
+*.exe
+*.bat
