@@ -57,7 +57,6 @@ namespace SkybloxLauncher
             {
                 new DiscordRPC.Button() { Label = "Play Skyblox", Url = "https://skyblox.co" }
             };
-.
             
             presence.Party = new Party()
             {
