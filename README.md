@@ -1,4 +1,4 @@
-# Skyblox - Launcher
+# Skyblox Launcher
 
 This is the complete, full source of the Skyblox launcher.
 
