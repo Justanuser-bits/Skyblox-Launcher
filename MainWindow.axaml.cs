@@ -25,6 +25,7 @@ public partial class MainWindow : Window
 #endif
     private const string BaseUrl = "https://skyblox.co";
     private const string LauncherDownloadUrl = BaseUrl + "/clients/SkybloxLauncher.exe";
+    private const string LauncherDownloadUrlMac = BaseUrl + "/clients/OSX/SkybloxLauncher-macOS.zip";
     private const string DeployHistoryUrl = BaseUrl + "/clients/DeployHistory.txt";
 
     private readonly string? placeId;
@@ -177,10 +178,20 @@ public partial class MainWindow : Window
         {
             using var client = new HttpClient();
             string history = await client.GetStringAsync($"{DeployHistoryUrl}?t={DateTime.Now.Ticks}");
+            string prefix = OperatingSystem.IsMacOS() ? "LauncherOSX:" : "Launcher:";
             string remoteHash = "";
+
+            // Check OS-specific tag first, then fallback to Launcher:
             foreach (var line in history.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
             {
-                if (line.StartsWith("Launcher:")) { remoteHash = line.Trim(); break; }
+                if (line.StartsWith(prefix)) { remoteHash = line.Trim(); break; }
+            }
+            if (string.IsNullOrEmpty(remoteHash))
+            {
+                foreach (var line in history.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (line.StartsWith("Launcher:")) { remoteHash = line.Trim(); break; }
+                }
             }
 
             if (string.IsNullOrEmpty(remoteHash)) return;
@@ -191,7 +202,8 @@ public partial class MainWindow : Window
             {
                 foreach (var line in File.ReadAllText(localHistoryPath).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
                 {
-                    if (line.StartsWith("Launcher:")) { localHash = line.Trim(); break; }
+                    if (line.StartsWith(prefix)) { localHash = line.Trim(); break; }
+                    if (string.IsNullOrEmpty(localHash) && line.StartsWith("Launcher:")) { localHash = line.Trim(); }
                 }
             }
 
@@ -213,6 +225,61 @@ public partial class MainWindow : Window
                     await File.WriteAllTextAsync("update.bat", batch);
                     Process.Start(new ProcessStartInfo("update.bat") { CreateNoWindow = true, UseShellExecute = false });
                     Dispatcher.UIThread.Post(() => Close());
+                }
+            }
+            // Launcher self-updating on macOS
+            else if (OperatingSystem.IsMacOS() && !string.IsNullOrEmpty(localHash) && localHash != remoteHash)
+            {
+                string currentExe = Process.GetCurrentProcess().MainModule?.FileName ?? "";
+                int appIdx = currentExe.IndexOf(".app", StringComparison.OrdinalIgnoreCase);
+                if (appIdx != -1)
+                {
+                    string appBundlePath = currentExe.Substring(0, appIdx + 4);
+                    // Only auto-update if not running from a read-only DMG volume
+                    if (!appBundlePath.StartsWith("/Volumes/"))
+                    {
+                        UpdateStatus("Updating macOS launcher...");
+                        string updateZip = Path.Combine(AppDataFolder, "SkybloxLauncher_update.zip");
+                        string extractDir = Path.Combine(AppDataFolder, "update_extracted");
+
+                        if (Directory.Exists(extractDir)) Directory.Delete(extractDir, true);
+                        if (File.Exists(updateZip)) File.Delete(updateZip);
+
+                        byte[] newZip = await client.GetByteArrayAsync(LauncherDownloadUrlMac);
+                        await File.WriteAllBytesAsync(updateZip, newZip);
+
+                        ZipFile.ExtractToDirectory(updateZip, extractDir);
+                        File.Delete(updateZip);
+
+                        string newAppPath = Path.Combine(extractDir, "SkybloxLauncher.app");
+                        if (!Directory.Exists(newAppPath))
+                        {
+                            var dirs = Directory.GetDirectories(extractDir, "*.app", SearchOption.AllDirectories);
+                            if (dirs.Length > 0) newAppPath = dirs[0];
+                        }
+
+                        if (Directory.Exists(newAppPath))
+                        {
+                            if (!Directory.Exists(AppDataFolder)) Directory.CreateDirectory(AppDataFolder);
+                            await File.WriteAllTextAsync(localHistoryPath, history.Trim());
+
+                            string scriptPath = Path.Combine(AppDataFolder, "update.sh");
+                            string scriptContent = $@"#!/bin/bash
+sleep 1
+rm -rf ""{appBundlePath}""
+cp -R ""{newAppPath}"" ""{appBundlePath}""
+rm -rf ""{extractDir}""
+xattr -cr ""{appBundlePath}"" 2>/dev/null || true
+open ""{appBundlePath}""
+rm -f ""$0""
+";
+                            await File.WriteAllTextAsync(scriptPath, scriptContent);
+                            File.SetUnixFileMode(scriptPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+                            Process.Start(new ProcessStartInfo("/bin/bash", $"\"{scriptPath}\"") { UseShellExecute = false });
+                            Dispatcher.UIThread.Post(() => Close());
+                        }
+                    }
                 }
             }
         }
