@@ -6,4 +6,5 @@
 *.suo
 *.exe
 *.bat
+*.sh
 publish/
