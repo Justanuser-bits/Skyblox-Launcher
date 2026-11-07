@@ -1,33 +1,51 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks>net8.0-windows;net8.0</TargetFrameworks>
     <Nullable>enable</Nullable>
-    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Resources\SkybloxLogo.ico</ApplicationIcon>
     <AssemblyName>SkybloxLauncher</AssemblyName>
     <RootNamespace>SkybloxLauncher</RootNamespace>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <!-- macOS Info.plist configuration -->
+
+    <!-- Windows specific -->
+    <UseWPF Condition="'$(TargetFramework)' == 'net8.0-windows'">true</UseWPF>
+
+    <!-- macOS bundle properties -->
+    <RuntimeIdentifiers Condition="'$(TargetFramework)' == 'net8.0'">osx-x64;osx-arm64</RuntimeIdentifiers>
     <CFBundleName>SkybloxLauncher</CFBundleName>
     <CFBundleDisplayName>Skyblox Launcher</CFBundleDisplayName>
     <CFBundleIdentifier>co.skyblox.launcher</CFBundleIdentifier>
+    <CFBundleShortVersionString>1.0.6</CFBundleShortVersionString>
     <CFBundleVersion>1.0.6</CFBundleVersion>
+    <LSMinimumSystemVersion>10.15</LSMinimumSystemVersion>
     <CFBundlePackageType>APPL</CFBundlePackageType>
   </PropertyGroup>
 
   <ItemGroup>
-    <AvaloniaResource Include="Resources\Skyblox_logo.png" />
-    <AvaloniaResource Include="Resources\SkybloxLogo.ico" />
+    <None Include="Resources\Skyblox_logo.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Resources\SkybloxLogo.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <EmbeddedResource Include="Resources\Skyblox_logo.png" />
+    <EmbeddedResource Include="Resources\SkybloxLogo.ico" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.1.5" />
-    <PackageReference Include="Avalonia.Desktop" Version="12.1.5" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.5" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.5" />
+    <PackageReference Include="Eto.Forms" Version="2.9.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="DiscordRichPresence" Version="1.2.1.24" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
+    <PackageReference Include="Eto.Platform.Wpf" Version="2.9.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <PackageReference Include="Eto.Platform.Mac64" Version="2.9.0" />
   </ItemGroup>
 </Project>

@@ -3,20 +3,14 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Web;
-using Avalonia.Controls;
-using Avalonia.Input;
-using Avalonia.Interactivity;
-using Avalonia.Media;
-using Avalonia.Styling;
-using Avalonia.Threading;
+using Eto.Drawing;
+using Eto.Forms;
 
 namespace SkybloxLauncher;
 
-public partial class MainWindow : Window
+public class MainForm : Form
 {
 #if DEBUG
     private const string CurrentVersion = "DEBUG";
@@ -30,7 +24,15 @@ public partial class MainWindow : Window
 
     private readonly string? placeId;
     private readonly string? ticket;
-    private readonly string year;
+    private string year;
+
+    private readonly Label statusLabel;
+    private readonly ProgressBar progressBar;
+    private readonly Button repairButton;
+    private readonly Button launchButton;
+    private readonly DropDown yearDropDown;
+
+    private bool isRepairMode = false;
 
     private static string AppDataFolder
     {
@@ -54,92 +56,159 @@ public partial class MainWindow : Window
     private string CurrentYearFolder => Path.Combine(AppDataFolder, year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2019") ? "2019" : year.Contains("2018") ? "2018" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : "2016");
     private string ClientExe => Path.Combine(CurrentYearFolder, "SkybloxPlayerBeta.exe");
 
-    private bool isRepairMode = false;
+    public MainForm() : this(null, null, "2016") { }
 
-    public MainWindow() : this(null, null, "2016") { }
-
-    public MainWindow(string? placeId, string? ticket, string year)
+    public MainForm(string? placeId, string? ticket, string year)
     {
         this.placeId = placeId;
         this.ticket = ticket;
         this.year = year;
 
-        InitializeComponent();
+        Title = "Skyblox Launcher";
+        ClientSize = new Size(420, 280);
+        MinimumSize = new Size(380, 260);
+        BackgroundColor = Color.FromArgb(24, 24, 27);
 
-        var versionFooter = this.FindControl<TextBlock>("VersionFooter");
-        if (versionFooter != null)
+        try
         {
-            versionFooter.Text = $"v{CurrentVersion}";
+            Icon = Icon.FromResource("SkybloxLauncher.Resources.SkybloxLogo.ico");
         }
+        catch { }
 
-        this.Loaded += (s, e) => Task.Run(StartLauncher);
-    }
-
-    private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        // Controls
+        Image? logoImg = null;
+        try
         {
-            BeginMoveDrag(e);
+            if (File.Exists("Skyblox_logo.png"))
+                logoImg = new Bitmap("Skyblox_logo.png");
+            else if (File.Exists("Resources/Skyblox_logo.png"))
+                logoImg = new Bitmap("Resources/Skyblox_logo.png");
+            else
+                logoImg = Bitmap.FromResource("SkybloxLauncher.Resources.Skyblox_logo.png");
         }
-    }
+        catch { }
 
-    private void OnCloseClick(object? sender, RoutedEventArgs e)
-    {
-        Close();
-    }
-
-    private void OnLogoClick(object? sender, PointerPressedEventArgs e)
-    {
-        var app = Avalonia.Application.Current;
-        if (app != null)
+        var logoView = new ImageView
         {
-            app.RequestedThemeVariant = app.ActualThemeVariant == ThemeVariant.Dark
-                ? ThemeVariant.Light
-                : ThemeVariant.Dark;
-        }
-    }
+            Image = logoImg,
+            Size = new Size(180, 50)
+        };
 
-    private void OnRepairClick(object? sender, PointerPressedEventArgs e)
-    {
-        isRepairMode = true;
-        Task.Run(StartLauncher);
+        statusLabel = new Label
+        {
+            Text = "Initializing Skyblox Launcher...",
+            TextColor = Color.FromArgb(240, 240, 240),
+            TextAlignment = TextAlignment.Center,
+            Font = Fonts.Sans(10, FontStyle.Bold)
+        };
+
+        progressBar = new ProgressBar
+        {
+            Width = 340,
+            Indeterminate = true
+        };
+
+        yearDropDown = new DropDown
+        {
+            Width = 90
+        };
+        yearDropDown.Items.Add("2015");
+        yearDropDown.Items.Add("2016");
+        yearDropDown.Items.Add("2017");
+        yearDropDown.Items.Add("2018");
+        yearDropDown.Items.Add("2019");
+        yearDropDown.Items.Add("2020");
+        yearDropDown.Items.Add("2021");
+        yearDropDown.SelectedValue = year;
+        yearDropDown.SelectedValueChanged += (s, e) =>
+        {
+            if (yearDropDown.SelectedValue != null)
+                this.year = yearDropDown.SelectedValue.ToString() ?? "2016";
+        };
+
+        repairButton = new Button
+        {
+            Text = "Repair",
+            Width = 80
+        };
+        repairButton.Click += (s, e) =>
+        {
+            isRepairMode = true;
+            Task.Run(StartLauncher);
+        };
+
+        launchButton = new Button
+        {
+            Text = "Launch",
+            Width = 80
+        };
+        launchButton.Click += (s, e) =>
+        {
+            Task.Run(StartLauncher);
+        };
+
+        var versionLabel = new Label
+        {
+            Text = $"v{CurrentVersion}",
+            TextColor = Color.FromArgb(120, 120, 120),
+            TextAlignment = TextAlignment.Right,
+            Font = Fonts.Sans(8)
+        };
+
+        var actionsRow = new StackLayout
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 10,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Items = { yearDropDown, repairButton, launchButton }
+        };
+
+        Content = new StackLayout
+        {
+            Padding = new Padding(20, 16),
+            Spacing = 14,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Items =
+            {
+                logoView,
+                statusLabel,
+                progressBar,
+                actionsRow,
+                new StackLayoutItem(versionLabel, HorizontalAlignment.Right)
+            }
+        };
+
+        Shown += (s, e) => Task.Run(StartLauncher);
     }
 
     private void UpdateStatus(string message)
     {
-        Dispatcher.UIThread.Post(() =>
+        Application.Instance.AsyncInvoke(() =>
         {
-            var label = this.FindControl<TextBlock>("StatusLabel");
-            if (label != null) label.Text = message;
+            statusLabel.Text = message;
         });
     }
 
     private void SetProgress(int percent, long currentBytes, long totalBytes)
     {
-        Dispatcher.UIThread.Post(() =>
+        Application.Instance.AsyncInvoke(() =>
         {
-            var bar = this.FindControl<ProgressBar>("ProgressBar");
-            var label = this.FindControl<TextBlock>("StatusLabel");
-            if (bar != null)
+            progressBar.Indeterminate = false;
+            progressBar.Value = Math.Clamp(percent, 0, 100);
+            if (totalBytes > 0)
             {
-                bar.IsIndeterminate = false;
-                bar.Value = Math.Clamp(percent, 0, 100);
-            }
-            if (label != null && totalBytes > 0)
-            {
-                label.Text = $"{label.Text?.Split('\n')[0]}\n{currentBytes / 1024 / 1024} MB / {totalBytes / 1024 / 1024} MB ({percent}%)";
+                string firstLine = statusLabel.Text?.Split('\n')[0] ?? "";
+                statusLabel.Text = $"{firstLine}\n{currentBytes / 1024 / 1024} MB / {totalBytes / 1024 / 1024} MB ({percent}%)";
             }
         });
     }
 
     private void SetIndeterminate(string message)
     {
-        Dispatcher.UIThread.Post(() =>
+        Application.Instance.AsyncInvoke(() =>
         {
-            var bar = this.FindControl<ProgressBar>("ProgressBar");
-            var label = this.FindControl<TextBlock>("StatusLabel");
-            if (bar != null) bar.IsIndeterminate = true;
-            if (label != null) label.Text = message;
+            progressBar.Indeterminate = true;
+            statusLabel.Text = message;
         });
     }
 
@@ -163,7 +232,7 @@ public partial class MainWindow : Window
             }
             else
             {
-                UpdateStatus("Finished installing all clients. You may now exit");
+                UpdateStatus("Finished checking clients. You may now exit or click Launch.");
             }
         }
         catch (Exception ex)
@@ -181,7 +250,6 @@ public partial class MainWindow : Window
             string prefix = OperatingSystem.IsMacOS() ? "LauncherOSX:" : "Launcher:";
             string remoteHash = "";
 
-            // Check OS-specific tag first, then fallback to Launcher:
             foreach (var line in history.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 if (line.StartsWith(prefix)) { remoteHash = line.Trim(); break; }
@@ -207,7 +275,6 @@ public partial class MainWindow : Window
                 }
             }
 
-            // Launcher self-updating on Windows
             if (OperatingSystem.IsWindows() && !string.IsNullOrEmpty(localHash) && localHash != remoteHash)
             {
                 UpdateStatus("Updating launcher...");
@@ -224,10 +291,9 @@ public partial class MainWindow : Window
                     string batch = $"@echo off\ntimeout /t 1\ndel \"{currentExe}\"\nmove \"{tmpPath}\" \"{currentExe}\"\nstart \"\" \"{currentExe}\"\nexit";
                     await File.WriteAllTextAsync("update.bat", batch);
                     Process.Start(new ProcessStartInfo("update.bat") { CreateNoWindow = true, UseShellExecute = false });
-                    Dispatcher.UIThread.Post(() => Close());
+                    Application.Instance.AsyncInvoke(() => Close());
                 }
             }
-            // Launcher self-updating on macOS
             else if (OperatingSystem.IsMacOS() && !string.IsNullOrEmpty(localHash) && localHash != remoteHash)
             {
                 string currentExe = Process.GetCurrentProcess().MainModule?.FileName ?? "";
@@ -235,7 +301,6 @@ public partial class MainWindow : Window
                 if (appIdx != -1)
                 {
                     string appBundlePath = currentExe.Substring(0, appIdx + 4);
-                    // Only auto-update if not running from a read-only DMG volume
                     if (!appBundlePath.StartsWith("/Volumes/"))
                     {
                         UpdateStatus("Updating macOS launcher...");
@@ -277,7 +342,7 @@ rm -f ""$0""
                             File.SetUnixFileMode(scriptPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 
                             Process.Start(new ProcessStartInfo("/bin/bash", $"\"{scriptPath}\"") { UseShellExecute = false });
-                            Dispatcher.UIThread.Post(() => Close());
+                            Application.Instance.AsyncInvoke(() => Close());
                         }
                     }
                 }
@@ -350,7 +415,6 @@ rm -f ""$0""
                 ZipFile.ExtractToDirectory(zip, path);
                 File.Delete(zip);
 
-                // Ensure execute permissions on POSIX
                 if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
                 {
                     try
@@ -435,7 +499,6 @@ rm -f ""$0""
             }
             else if (OperatingSystem.IsMacOS())
             {
-                // Run via Wine on macOS
                 string wineCmd = "wine";
                 string[] possibleWinePaths = {
                     "/usr/local/bin/wine",
@@ -468,7 +531,7 @@ rm -f ""$0""
                 Process.Start(psi);
             }
 
-            Dispatcher.UIThread.Post(() => this.Hide());
+            Application.Instance.AsyncInvoke(() => this.Visible = false);
 
             new Thread(() =>
             {
@@ -478,7 +541,7 @@ rm -f ""$0""
                     Thread.Sleep(3000);
                 }
                 DiscordManager.Shutdown();
-                Dispatcher.UIThread.Post(() => Close());
+                Application.Instance.AsyncInvoke(() => Close());
             })
             { IsBackground = true }.Start();
         }

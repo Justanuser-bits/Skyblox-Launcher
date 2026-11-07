@@ -1,6 +1,6 @@
-using Avalonia;
 using System;
 using System.Web;
+using Eto.Forms;
 
 namespace SkybloxLauncher;
 
@@ -31,16 +31,7 @@ public static class Program
             catch { }
         }
 
-        App.PlaceId = p;
-        App.Ticket = t;
-        App.Year = y;
-
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        var platform = Eto.Platform.Detect;
+        new Application(platform).Run(new MainForm(p, t, y));
     }
-
-    public static AppBuilder BuildAvaloniaApp()
-        => AppBuilder.Configure<App>()
-            .UsePlatformDetect()
-            .WithInterFont()
-            .LogToTrace();
 }
