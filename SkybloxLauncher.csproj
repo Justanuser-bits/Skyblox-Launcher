@@ -12,6 +12,11 @@
 
     <!-- Windows specific -->
     <UseWPF Condition="'$(TargetFramework)' == 'net8.0-windows'">true</UseWPF>
+    <PublishSingleFile Condition="'$(TargetFramework)' == 'net8.0-windows'">true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract Condition="'$(TargetFramework)' == 'net8.0-windows'">true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile Condition="'$(TargetFramework)' == 'net8.0-windows'">true</EnableCompressionInSingleFile>
+    <DefineConstants Condition="'$(TargetFramework)' == 'net8.0-windows'">$(DefineConstants);WINDOWS_PLATFORM</DefineConstants>
+    <DefineConstants Condition="'$(TargetFramework)' == 'net8.0'">$(DefineConstants);MAC_PLATFORM</DefineConstants>
 
     <!-- macOS bundle properties -->
     <RuntimeIdentifiers Condition="'$(TargetFramework)' == 'net8.0'">osx-x64;osx-arm64</RuntimeIdentifiers>

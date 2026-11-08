@@ -24,15 +24,19 @@ public class MainForm : Form
 
     private readonly string? placeId;
     private readonly string? ticket;
-    private string year;
+    private readonly string year;
 
-    private readonly Label statusLabel;
-    private readonly ProgressBar progressBar;
-    private readonly Button repairButton;
-    private readonly Button launchButton;
-    private readonly DropDown yearDropDown;
+    private readonly Label status;
+    private readonly ProgressBar progress;
+    private readonly Label closeBtn;
+    private readonly Label repairLink;
+    private readonly Label footer;
 
+    private bool isDarkMode = true;
     private bool isRepairMode = false;
+
+    private PointF dragStart;
+    private bool isDragging = false;
 
     private static string AppDataFolder
     {
@@ -60,14 +64,35 @@ public class MainForm : Form
 
     public MainForm(string? placeId, string? ticket, string year)
     {
+        string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Skyblox", "launcher_log.txt");
+        File.AppendAllText(logPath, "MainForm ctor starting...\n");
         this.placeId = placeId;
         this.ticket = ticket;
         this.year = year;
 
         Title = "Skyblox Launcher";
-        ClientSize = new Size(420, 280);
-        MinimumSize = new Size(380, 260);
-        BackgroundColor = Color.FromArgb(24, 24, 27);
+        ClientSize = new Size(440, 280);
+        WindowStyle = WindowStyle.None;
+        Resizable = false;
+
+        LoadComplete += (s, e) =>
+        {
+            File.AppendAllText(logPath, "MainForm LoadComplete event fired\n");
+            try
+            {
+                var screen = Screen.PrimaryScreen;
+                if (screen != null)
+                {
+                    var wa = screen.WorkingArea;
+                    Location = new Point((int)(wa.X + (wa.Width - ClientSize.Width) / 2), (int)(wa.Y + (wa.Height - ClientSize.Height) / 2));
+                    File.AppendAllText(logPath, $"Set location to {Location}\n");
+                }
+            }
+            catch (Exception ex)
+            {
+                File.AppendAllText(logPath, $"LoadComplete error: {ex}\n");
+            }
+        };
 
         try
         {
@@ -75,117 +100,135 @@ public class MainForm : Form
         }
         catch { }
 
-        // Controls
+        // Window drag handling
+        MouseDown += (s, e) =>
+        {
+            if (e.Buttons == MouseButtons.Primary)
+            {
+                isDragging = true;
+                dragStart = e.Location;
+            }
+        };
+        MouseMove += (s, e) =>
+        {
+            if (isDragging)
+            {
+                var diff = e.Location - dragStart;
+                Location = new Point((int)(Location.X + diff.X), (int)(Location.Y + diff.Y));
+            }
+        };
+        MouseUp += (s, e) => { isDragging = false; };
+
+        // Logo
         Image? logoImg = null;
         try
         {
-            if (File.Exists("Skyblox_logo.png"))
-                logoImg = new Bitmap("Skyblox_logo.png");
-            else if (File.Exists("Resources/Skyblox_logo.png"))
-                logoImg = new Bitmap("Resources/Skyblox_logo.png");
-            else
-                logoImg = Bitmap.FromResource("SkybloxLauncher.Resources.Skyblox_logo.png");
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string p1 = Path.Combine(baseDir, "Skyblox_logo.png");
+            string p2 = Path.Combine(baseDir, "Resources", "Skyblox_logo.png");
+            if (File.Exists(p1)) logoImg = new Bitmap(p1);
+            else if (File.Exists(p2)) logoImg = new Bitmap(p2);
+            else if (File.Exists("Skyblox_logo.png")) logoImg = new Bitmap("Skyblox_logo.png");
+            else if (File.Exists("Resources/Skyblox_logo.png")) logoImg = new Bitmap("Resources/Skyblox_logo.png");
+            else logoImg = Bitmap.FromResource("SkybloxLauncher.Resources.Skyblox_logo.png");
         }
         catch { }
 
-        var logoView = new ImageView
+        var logo = new ImageView
         {
             Image = logoImg,
-            Size = new Size(180, 50)
+            Size = new Size(180, 90),
+            Cursor = Cursors.Pointer
+        };
+        logo.MouseDown += (s, e) =>
+        {
+            isDarkMode = !isDarkMode;
+            ApplyTheme();
         };
 
-        statusLabel = new Label
+        status = new Label
         {
-            Text = "Initializing Skyblox Launcher...",
-            TextColor = Color.FromArgb(240, 240, 240),
+            Text = "Checking for updates...",
+            Size = new Size(440, 45),
             TextAlignment = TextAlignment.Center,
-            Font = Fonts.Sans(10, FontStyle.Bold)
+            Font = Fonts.Sans(11, FontStyle.Bold)
         };
 
-        progressBar = new ProgressBar
+        progress = new ProgressBar
         {
-            Width = 340,
+            Size = new Size(300, 6),
             Indeterminate = true
         };
 
-        yearDropDown = new DropDown
+        closeBtn = new Label
         {
-            Width = 90
+            Text = "✕",
+            Size = new Size(25, 25),
+            Font = Fonts.Sans(12, FontStyle.Bold),
+            Cursor = Cursors.Pointer,
+            TextAlignment = TextAlignment.Center
         };
-        yearDropDown.Items.Add("2015");
-        yearDropDown.Items.Add("2016");
-        yearDropDown.Items.Add("2017");
-        yearDropDown.Items.Add("2018");
-        yearDropDown.Items.Add("2019");
-        yearDropDown.Items.Add("2020");
-        yearDropDown.Items.Add("2021");
-        yearDropDown.SelectedValue = year;
-        yearDropDown.SelectedValueChanged += (s, e) =>
-        {
-            if (yearDropDown.SelectedValue != null)
-                this.year = yearDropDown.SelectedValue.ToString() ?? "2016";
-        };
+        closeBtn.MouseDown += (s, e) => Application.Instance.Quit();
 
-        repairButton = new Button
+        repairLink = new Label
         {
             Text = "Repair",
-            Width = 80
+            Size = new Size(440, 18),
+            TextAlignment = TextAlignment.Center,
+            Font = Fonts.Sans(9),
+            Cursor = Cursors.Pointer
         };
-        repairButton.Click += (s, e) =>
+        repairLink.MouseDown += (s, e) =>
         {
             isRepairMode = true;
             Task.Run(StartLauncher);
         };
 
-        launchButton = new Button
-        {
-            Text = "Launch",
-            Width = 80
-        };
-        launchButton.Click += (s, e) =>
-        {
-            Task.Run(StartLauncher);
-        };
-
-        var versionLabel = new Label
+        footer = new Label
         {
             Text = $"v{CurrentVersion}",
-            TextColor = Color.FromArgb(120, 120, 120),
-            TextAlignment = TextAlignment.Right,
+            Size = new Size(440, 18),
+            TextAlignment = TextAlignment.Center,
             Font = Fonts.Sans(8)
         };
 
-        var actionsRow = new StackLayout
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 10,
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            Items = { yearDropDown, repairButton, launchButton }
-        };
+        var layout = new PixelLayout();
+        layout.Add(logo, 130, 25);
+        layout.Add(status, 0, 125);
+        layout.Add(progress, 70, 180);
+        layout.Add(closeBtn, 405, 10);
+        layout.Add(repairLink, 0, 230);
+        layout.Add(footer, 0, 250);
 
-        Content = new StackLayout
-        {
-            Padding = new Padding(20, 16),
-            Spacing = 14,
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            Items =
-            {
-                logoView,
-                statusLabel,
-                progressBar,
-                actionsRow,
-                new StackLayoutItem(versionLabel, HorizontalAlignment.Right)
-            }
-        };
+        Content = layout;
+        ApplyTheme();
 
-        Shown += (s, e) => Task.Run(StartLauncher);
+        File.AppendAllText(logPath, "MainForm layout and theme set, registering Shown\n");
+
+        Shown += (s, e) =>
+        {
+            File.AppendAllText(logPath, "MainForm Shown event fired!\n");
+            Task.Run(StartLauncher);
+        };
+        File.AppendAllText(logPath, "MainForm ctor completed successfully!\n");
+    }
+
+    private void ApplyTheme()
+    {
+        Color bg = isDarkMode ? Color.FromArgb(25, 25, 25) : Color.FromArgb(245, 245, 245);
+        Color text = isDarkMode ? Color.FromArgb(240, 240, 240) : Color.FromArgb(40, 40, 40);
+        BackgroundColor = bg;
+        status.TextColor = text;
+        closeBtn.TextColor = text;
+        footer.TextColor = Color.FromArgb(120, 120, 120);
+        repairLink.TextColor = Color.FromArgb(100, 149, 237);
     }
 
     private void UpdateStatus(string message)
     {
         Application.Instance.AsyncInvoke(() =>
         {
-            statusLabel.Text = message;
+            status.Text = message;
         });
     }
 
@@ -193,12 +236,12 @@ public class MainForm : Form
     {
         Application.Instance.AsyncInvoke(() =>
         {
-            progressBar.Indeterminate = false;
-            progressBar.Value = Math.Clamp(percent, 0, 100);
+            progress.Indeterminate = false;
+            progress.Value = Math.Clamp(percent, 0, 100);
             if (totalBytes > 0)
             {
-                string firstLine = statusLabel.Text?.Split('\n')[0] ?? "";
-                statusLabel.Text = $"{firstLine}\n{currentBytes / 1024 / 1024} MB / {totalBytes / 1024 / 1024} MB ({percent}%)";
+                string firstLine = status.Text?.Split('\n')[0] ?? "";
+                status.Text = $"{firstLine}\n{currentBytes / 1024 / 1024} MB / {totalBytes / 1024 / 1024} MB ({percent}%)";
             }
         });
     }
@@ -207,8 +250,8 @@ public class MainForm : Form
     {
         Application.Instance.AsyncInvoke(() =>
         {
-            progressBar.Indeterminate = true;
-            statusLabel.Text = message;
+            progress.Indeterminate = true;
+            status.Text = message;
         });
     }
 
@@ -232,7 +275,7 @@ public class MainForm : Form
             }
             else
             {
-                UpdateStatus("Finished checking clients. You may now exit or click Launch.");
+                UpdateStatus("Finished installing all clients. You may now exit");
             }
         }
         catch (Exception ex)
@@ -291,7 +334,7 @@ public class MainForm : Form
                     string batch = $"@echo off\ntimeout /t 1\ndel \"{currentExe}\"\nmove \"{tmpPath}\" \"{currentExe}\"\nstart \"\" \"{currentExe}\"\nexit";
                     await File.WriteAllTextAsync("update.bat", batch);
                     Process.Start(new ProcessStartInfo("update.bat") { CreateNoWindow = true, UseShellExecute = false });
-                    Application.Instance.AsyncInvoke(() => Close());
+                    Application.Instance.AsyncInvoke(() => Application.Instance.Quit());
                 }
             }
             else if (OperatingSystem.IsMacOS() && !string.IsNullOrEmpty(localHash) && localHash != remoteHash)
@@ -342,7 +385,7 @@ rm -f ""$0""
                             File.SetUnixFileMode(scriptPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 
                             Process.Start(new ProcessStartInfo("/bin/bash", $"\"{scriptPath}\"") { UseShellExecute = false });
-                            Application.Instance.AsyncInvoke(() => Close());
+                            Application.Instance.AsyncInvoke(() => Application.Instance.Quit());
                         }
                     }
                 }
@@ -541,7 +584,7 @@ rm -f ""$0""
                     Thread.Sleep(3000);
                 }
                 DiscordManager.Shutdown();
-                Application.Instance.AsyncInvoke(() => Close());
+                Application.Instance.AsyncInvoke(() => Application.Instance.Quit());
             })
             { IsBackground = true }.Start();
         }
