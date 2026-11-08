@@ -544,7 +544,7 @@ rm -f ""$0""
 
     private async Task InstallAllMissingClients()
     {
-        string[] years = { "2015", "2016", "2017", "2018", "2019", "2020" };
+        string[] years = { "2015", "2016", "2017", "2018", "2019", "2020", "2021" };
 
         using var client = new HttpClient();
         string remoteHistory = await FetchDeployHistoryAsync(client);
