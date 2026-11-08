@@ -21,6 +21,7 @@ public class MainForm : Form
     private const string LauncherDownloadUrl = BaseUrl + "/clients/SkybloxLauncher.exe";
     private const string LauncherDownloadUrlMac = BaseUrl + "/clients/OSX/SkybloxLauncher-macOS.zip";
     private const string DeployHistoryUrl = BaseUrl + "/clients/DeployHistory.txt";
+    private const string DeployHistoryUrlMac = BaseUrl + "/clients/OSX/DeployHistory.txt";
 
     private readonly string? placeId;
     private readonly string? ticket;
@@ -58,7 +59,124 @@ public class MainForm : Form
     }
 
     private string CurrentYearFolder => Path.Combine(AppDataFolder, year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2019") ? "2019" : year.Contains("2018") ? "2018" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : "2016");
-    private string ClientExe => Path.Combine(CurrentYearFolder, "SkybloxPlayerBeta.exe");
+
+    private static string GetClientTarget(string yearFolder)
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            string[] appNames = { "RobloxPlayer.app", "SkybloxPlayer.app", "RobloxPlayerBeta.app", "SkybloxPlayerBeta.app" };
+            foreach (var name in appNames)
+            {
+                string p = Path.Combine(yearFolder, name);
+                if (Directory.Exists(p)) return p;
+            }
+            if (Directory.Exists(yearFolder))
+            {
+                var apps = Directory.GetDirectories(yearFolder, "*.app");
+                if (apps.Length > 0) return apps[0];
+            }
+            string exe = Path.Combine(yearFolder, "SkybloxPlayerBeta.exe");
+            if (File.Exists(exe)) return exe;
+
+            return Path.Combine(yearFolder, "RobloxPlayer.app");
+        }
+        else
+        {
+            return Path.Combine(yearFolder, "SkybloxPlayerBeta.exe");
+        }
+    }
+
+    private static bool ClientExists(string targetPath)
+    {
+        if (OperatingSystem.IsMacOS() && targetPath.EndsWith(".app", StringComparison.OrdinalIgnoreCase))
+        {
+            return Directory.Exists(targetPath);
+        }
+        return File.Exists(targetPath);
+    }
+
+    private static string WineFolder => Path.Combine(AppDataFolder, "Wine");
+
+    private static string? GetWineExecutable()
+    {
+        if (!OperatingSystem.IsMacOS() && !OperatingSystem.IsLinux()) return null;
+
+        string[] searchPaths = {
+            Path.Combine(WineFolder, "bin", "wine"),
+            Path.Combine(WineFolder, "bin", "wine64"),
+            Path.Combine(WineFolder, "Wine.app", "Contents", "Resources", "wine", "bin", "wine"),
+            Path.Combine(WineFolder, "Wine Staging.app", "Contents", "Resources", "wine", "bin", "wine"),
+            Path.Combine(WineFolder, "Wine Stable.app", "Contents", "Resources", "wine", "bin", "wine"),
+            Path.Combine(WineFolder, "Wine Staging.app", "Contents", "MacOS", "wine"),
+            Path.Combine(WineFolder, "Wine.app", "Contents", "MacOS", "wine"),
+            "/usr/local/bin/wine",
+            "/opt/homebrew/bin/wine",
+            "/Applications/Wine Stable.app/Contents/Resources/wine/bin/wine",
+            "/Applications/Wine Devel.app/Contents/Resources/wine/bin/wine",
+            "/Applications/Wine Staging.app/Contents/Resources/wine/bin/wine"
+        };
+
+        foreach (var p in searchPaths)
+        {
+            if (File.Exists(p)) return p;
+        }
+
+        if (Directory.Exists(WineFolder))
+        {
+            try
+            {
+                var candidates = Directory.GetFiles(WineFolder, "wine", SearchOption.AllDirectories);
+                foreach (var c in candidates)
+                {
+                    if (c.Contains("bin") || c.Contains("MacOS")) return c;
+                }
+                if (candidates.Length > 0) return candidates[0];
+            }
+            catch { }
+        }
+
+        try
+        {
+            var p = Process.Start(new ProcessStartInfo("which", "wine") { RedirectStandardOutput = true, UseShellExecute = false });
+            string? outPath = p?.StandardOutput.ReadToEnd()?.Trim();
+            p?.WaitForExit();
+            if (!string.IsNullOrEmpty(outPath) && File.Exists(outPath)) return outPath;
+        }
+        catch { }
+
+        return null;
+    }
+
+    private async Task<string?> EnsureWineInstalled(HttpClient client)
+    {
+        string? wineExe = GetWineExecutable();
+        if (wineExe != null) return wineExe;
+
+        UpdateStatus("Downloading Wine runtime (one-time setup)...");
+        string wineZip = Path.Combine(AppDataFolder, "temp_Wine.zip");
+        string wineUrl = $"{BaseUrl}/clients/OSX/Wine.zip";
+
+        try
+        {
+            await DownloadFile(client, wineUrl, wineZip, "Wine runtime", "Downloading");
+            SetIndeterminate("Extracting Wine runtime...");
+            if (Directory.Exists(WineFolder)) Directory.Delete(WineFolder, true);
+            Directory.CreateDirectory(WineFolder);
+            ZipFile.ExtractToDirectory(wineZip, WineFolder);
+            File.Delete(wineZip);
+
+            Process.Start(new ProcessStartInfo("chmod", $"-R 755 \"{WineFolder}\"") { UseShellExecute = false })?.WaitForExit();
+            Process.Start(new ProcessStartInfo("xattr", $"-cr \"{WineFolder}\"") { UseShellExecute = false })?.WaitForExit();
+        }
+        catch (Exception ex)
+        {
+            if (File.Exists(wineZip)) File.Delete(wineZip);
+            UpdateStatus($"Wine setup: {ex.Message}");
+            return null;
+        }
+
+        return GetWineExecutable();
+    }
 
     public MainForm() : this(null, null, "2016") { }
 
@@ -271,7 +389,7 @@ public class MainForm : Form
             {
                 UpdateStatus("All clients up to date!\nLaunching...");
                 await Task.Delay(800);
-                LaunchGame();
+                await LaunchGame();
             }
             else
             {
@@ -284,12 +402,42 @@ public class MainForm : Form
         }
     }
 
+    private async Task<string> FetchDeployHistoryAsync(HttpClient client)
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            try
+            {
+                using var res = await client.GetAsync($"{DeployHistoryUrlMac}?t={DateTime.Now.Ticks}");
+                if (res.IsSuccessStatusCode)
+                {
+                    return await res.Content.ReadAsStringAsync();
+                }
+            }
+            catch { }
+        }
+
+        try
+        {
+            using var res = await client.GetAsync($"{DeployHistoryUrl}?t={DateTime.Now.Ticks}");
+            if (res.IsSuccessStatusCode)
+            {
+                return await res.Content.ReadAsStringAsync();
+            }
+        }
+        catch { }
+
+        return "";
+    }
+
     private async Task CheckForLauncherUpdates()
     {
         try
         {
             using var client = new HttpClient();
-            string history = await client.GetStringAsync($"{DeployHistoryUrl}?t={DateTime.Now.Ticks}");
+            string history = await FetchDeployHistoryAsync(client);
+            if (string.IsNullOrEmpty(history)) return;
+
             string prefix = OperatingSystem.IsMacOS() ? "LauncherOSX:" : "Launcher:";
             string remoteHash = "";
 
@@ -399,8 +547,7 @@ rm -f ""$0""
         string[] years = { "2015", "2016", "2017", "2018", "2019", "2020" };
 
         using var client = new HttpClient();
-        string remoteHistory = "";
-        try { remoteHistory = await client.GetStringAsync(DeployHistoryUrl); } catch { }
+        string remoteHistory = await FetchDeployHistoryAsync(client);
 
         string localHistoryPath = Path.Combine(AppDataFolder, "DeployHistory.txt");
         string localHistory = File.Exists(localHistoryPath) ? File.ReadAllText(localHistoryPath) : "";
@@ -409,10 +556,26 @@ rm -f ""$0""
         {
             bool isTargetYear = this.year.Contains(years[i]);
             string path = Path.Combine(AppDataFolder, years[i]);
-            string exePath = Path.Combine(path, "SkybloxPlayerBeta.exe");
-            string urlZip = $"{BaseUrl}/clients/{years[i].Substring(2, 2)}client.zip";
+            string clientTarget = GetClientTarget(path);
+            bool clientExists = ClientExists(clientTarget);
 
-            if (!isTargetYear && !isRepairMode && !File.Exists(exePath)) continue;
+            string urlZip = $"{BaseUrl}/clients/{years[i].Substring(2, 2)}client.zip";
+            if (OperatingSystem.IsMacOS())
+            {
+                string macUrl = $"{BaseUrl}/clients/OSX/{years[i]}/RobloxPlayer.zip";
+                try
+                {
+                    using var headReq = new HttpRequestMessage(HttpMethod.Head, macUrl);
+                    using var headRes = await client.SendAsync(headReq);
+                    if (headRes.IsSuccessStatusCode)
+                    {
+                        urlZip = macUrl;
+                    }
+                }
+                catch { }
+            }
+
+            if (!isTargetYear && !isRepairMode && !clientExists) continue;
 
             string remoteHash = "";
             if (!string.IsNullOrEmpty(remoteHistory))
@@ -434,9 +597,9 @@ rm -f ""$0""
 
             bool hashMismatch = !string.IsNullOrEmpty(remoteHash) && remoteHash != localHash;
 
-            if (!File.Exists(exePath) || (isRepairMode && isTargetYear) || hashMismatch)
+            if (!clientExists || (isRepairMode && isTargetYear) || hashMismatch)
             {
-                bool isUpdate = File.Exists(exePath);
+                bool isUpdate = clientExists;
                 string actionStr = isUpdate ? "Updating" : "Downloading";
                 SetIndeterminate($"{actionStr} {years[i]}...");
 
@@ -462,10 +625,8 @@ rm -f ""$0""
                 {
                     try
                     {
-                        if (File.Exists(exePath))
-                        {
-                            File.SetUnixFileMode(exePath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
-                        }
+                        Process.Start(new ProcessStartInfo("chmod", $"-R 755 \"{path}\"") { UseShellExecute = false })?.WaitForExit();
+                        Process.Start(new ProcessStartInfo("xattr", $"-cr \"{path}\"") { UseShellExecute = false })?.WaitForExit();
                     }
                     catch { }
                 }
@@ -507,11 +668,12 @@ rm -f ""$0""
         }
     }
 
-    private void LaunchGame()
+    private async Task LaunchGame()
     {
-        if (!File.Exists(ClientExe))
+        string clientTarget = GetClientTarget(CurrentYearFolder);
+        if (!ClientExists(clientTarget))
         {
-            UpdateStatus($"Missing: {ClientExe}\nClick 'Repair' to redownload.");
+            UpdateStatus($"Missing client in {CurrentYearFolder}\nClick 'Repair' to redownload.");
             return;
         }
 
@@ -533,42 +695,70 @@ rm -f ""$0""
             {
                 var psi = new ProcessStartInfo
                 {
-                    FileName = ClientExe,
+                    FileName = clientTarget,
                     Arguments = args,
-                    WorkingDirectory = Path.GetDirectoryName(ClientExe),
+                    WorkingDirectory = Path.GetDirectoryName(clientTarget),
                     UseShellExecute = false
                 };
                 Process.Start(psi);
             }
             else if (OperatingSystem.IsMacOS())
             {
-                string wineCmd = "wine";
-                string[] possibleWinePaths = {
-                    "/usr/local/bin/wine",
-                    "/opt/homebrew/bin/wine",
-                    "/Applications/Wine Stable.app/Contents/Resources/wine/bin/wine"
-                };
-                foreach (var p in possibleWinePaths)
+                if (clientTarget.EndsWith(".app", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (File.Exists(p)) { wineCmd = p; break; }
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "/usr/bin/open",
+                        Arguments = $"-n -a \"{clientTarget}\" --args {args}",
+                        UseShellExecute = false
+                    };
+                    Process.Start(psi);
                 }
-
-                var psi = new ProcessStartInfo
+                else
                 {
-                    FileName = wineCmd,
-                    Arguments = $"\"{ClientExe}\" {args}",
-                    WorkingDirectory = Path.GetDirectoryName(ClientExe),
-                    UseShellExecute = false
-                };
-                Process.Start(psi);
+                    using var http = new HttpClient();
+                    string? wineCmd = await EnsureWineInstalled(http);
+                    if (string.IsNullOrEmpty(wineCmd))
+                    {
+                        UpdateStatus("Wine runtime is required for legacy clients on macOS.\nPlease click 'Repair' or check your connection.");
+                        return;
+                    }
+
+                    string winePrefix = Path.Combine(AppDataFolder, "WinePrefix");
+                    if (!Directory.Exists(winePrefix)) Directory.CreateDirectory(winePrefix);
+
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = wineCmd,
+                        Arguments = $"\"{clientTarget}\" {args}",
+                        WorkingDirectory = Path.GetDirectoryName(clientTarget),
+                        UseShellExecute = false
+                    };
+                    psi.EnvironmentVariables["WINEPREFIX"] = winePrefix;
+                    psi.EnvironmentVariables["WINEDEBUG"] = "-all";
+
+                    string wineBinDir = Path.GetDirectoryName(wineCmd)!;
+                    string? wineBase = Path.GetDirectoryName(wineBinDir);
+                    if (wineBase != null)
+                    {
+                        string wineLibDir = Path.Combine(wineBase, "lib");
+                        if (Directory.Exists(wineLibDir))
+                        {
+                            psi.EnvironmentVariables["DYLD_FALLBACK_LIBRARY_PATH"] = wineLibDir;
+                        }
+                    }
+                    psi.EnvironmentVariables["PATH"] = wineBinDir + ":" + Environment.GetEnvironmentVariable("PATH");
+
+                    Process.Start(psi);
+                }
             }
             else
             {
                 var psi = new ProcessStartInfo
                 {
                     FileName = "wine",
-                    Arguments = $"\"{ClientExe}\" {args}",
-                    WorkingDirectory = Path.GetDirectoryName(ClientExe),
+                    Arguments = $"\"{clientTarget}\" {args}",
+                    WorkingDirectory = Path.GetDirectoryName(clientTarget),
                     UseShellExecute = false
                 };
                 Process.Start(psi);
@@ -579,7 +769,10 @@ rm -f ""$0""
             new Thread(() =>
             {
                 Thread.Sleep(5000);
-                while (Process.GetProcessesByName("SkybloxPlayerBeta").Length > 0)
+                while (Process.GetProcessesByName("SkybloxPlayerBeta").Length > 0 ||
+                       Process.GetProcessesByName("RobloxPlayer").Length > 0 ||
+                       Process.GetProcessesByName("Roblox").Length > 0 ||
+                       Process.GetProcessesByName("SkybloxPlayer").Length > 0)
                 {
                     Thread.Sleep(3000);
                 }
