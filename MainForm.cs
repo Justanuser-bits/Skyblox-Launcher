@@ -15,7 +15,7 @@ public class MainForm : Form
 #if DEBUG
     private const string CurrentVersion = "DEBUG";
 #else
-    private const string CurrentVersion = "1.0.6";
+    private const string CurrentVersion = "1.0.6.2";
 #endif
     private const string BaseUrl = "https://skyblox.co";
     private const string LauncherDownloadUrl = BaseUrl + "/clients/SkybloxLauncher.exe";
