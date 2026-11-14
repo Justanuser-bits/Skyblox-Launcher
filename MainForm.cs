@@ -58,7 +58,7 @@ public class MainForm : Form
         }
     }
 
-    private string CurrentYearFolder => Path.Combine(AppDataFolder, year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2019") ? "2019" : year.Contains("2018") ? "2018" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : "2016");
+    private string CurrentYearFolder => Path.Combine(AppDataFolder, year.Contains("2023") ? "2023" : year.Contains("2022") ? "2022" : year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2019") ? "2019" : year.Contains("2018") ? "2018" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : year.Contains("2014") ? "2014" : year.Contains("2013") ? "2013" : "2016");
 
     private static string GetClientTarget(string yearFolder)
     {
@@ -544,7 +544,7 @@ rm -f ""$0""
 
     private async Task InstallAllMissingClients()
     {
-        string[] years = { "2015", "2016", "2017", "2018", "2019", "2020", "2021" };
+        string[] years = { "2013", "2014", "2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022" };
 
         using var client = new HttpClient();
         string remoteHistory = await FetchDeployHistoryAsync(client);
@@ -677,7 +677,7 @@ rm -f ""$0""
             return;
         }
 
-        string? yearFlag = year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2019") ? "2019" : year.Contains("2018") ? "2018" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : null;
+        string? yearFlag = year.Contains("2023") ? "2023" : year.Contains("2022") ? "2022" : year.Contains("2021") ? "2021" : year.Contains("2020") ? "2020" : year.Contains("2019") ? "2019" : year.Contains("2018") ? "2018" : year.Contains("2017") ? "2017" : year.Contains("2015") ? "2015" : year.Contains("2014") ? "2014" : year.Contains("2013") ? "2013" : null;
         string joinUrl = !string.IsNullOrEmpty(yearFlag)
             ? $"{BaseUrl}/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}&{yearFlag}=true"
             : $"{BaseUrl}/game/PlaceLauncher.ashx?placeid={placeId}&ticket={ticket}";
